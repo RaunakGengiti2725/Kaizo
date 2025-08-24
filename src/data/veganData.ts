@@ -1,19 +1,91 @@
-// Ingredient detection rules
+// Comprehensive ingredient detection rules with detailed categorization
 export const VEGAN_RULES = {
   notVegan: [
-    'milk', 'butter', 'cheese', 'cream', 'whey', 'casein', 'lactose',
-    'eggs', 'egg white', 'egg yolk', 'albumin',
-    'meat', 'beef', 'pork', 'chicken', 'turkey', 'fish', 'salmon', 'tuna',
-    'gelatin', 'collagen', 'carmine', 'cochineal', 'shellac',
-    'honey', 'beeswax', 'royal jelly', 'propolis',
-    'lard', 'tallow', 'rennet', 'isinglass'
+    // Dairy products
+    'milk', 'butter', 'cheese', 'cream', 'whey', 'casein', 'lactose', 'buttermilk',
+    'ghee', 'dairy', 'lactoglobulin', 'lactalbumin', 'milk powder', 'milk solids',
+    'condensed milk', 'evaporated milk', 'sour cream', 'yogurt', 'kefir',
+    // Eggs
+    'eggs', 'egg white', 'egg yolk', 'albumin', 'egg powder', 'mayonnaise',
+    'lecithin (egg)', 'lysozyme', 'ovalbumin', 'ovomucoid',
+    // Meat and poultry
+    'meat', 'beef', 'pork', 'chicken', 'turkey', 'duck', 'lamb', 'veal',
+    'bacon', 'ham', 'sausage', 'pepperoni', 'salami', 'prosciutto',
+    // Seafood
+    'fish', 'salmon', 'tuna', 'cod', 'anchovy', 'sardine', 'crab', 'lobster',
+    'shrimp', 'prawns', 'oyster', 'mussel', 'clam', 'scallop', 'caviar',
+    'fish sauce', 'worcestershire sauce', 'caesar dressing',
+    // Animal-derived additives
+    'gelatin', 'collagen', 'carmine', 'cochineal', 'shellac', 'confectioner\'s glaze',
+    'bone char', 'bone meal', 'blood', 'plasma', 'hemoglobin',
+    // Bee products
+    'honey', 'beeswax', 'royal jelly', 'propolis', 'bee pollen',
+    // Fats and oils
+    'lard', 'tallow', 'suet', 'chicken fat', 'duck fat', 'beef fat',
+    // Enzymes and proteins
+    'rennet', 'isinglass', 'pepsin', 'trypsin', 'lipase', 'chymotrypsin'
   ],
   unclear: [
-    'natural flavors', 'artificial flavors', 'vitamin d3', 'vitamin d',
-    'mono and diglycerides', 'glycerin', 'glycerol', 'lecithin',
-    'stearic acid', 'palmitic acid', 'oleic acid',
-    'sugar', 'brown sugar', 'confectioners sugar'
+    // Flavors (source unclear)
+    'natural flavors', 'artificial flavors', 'natural flavor', 'flavoring',
+    'vanilla extract', 'natural vanilla flavor',
+    // Vitamins (may be animal-derived)
+    'vitamin d3', 'vitamin d', 'vitamin b12', 'vitamin a', 'retinol',
+    'cholecalciferol', 'ergocalciferol',
+    // Fats and emulsifiers
+    'mono and diglycerides', 'glycerin', 'glycerol', 'lecithin', 'polysorbate',
+    'stearic acid', 'palmitic acid', 'oleic acid', 'fatty acids',
+    'magnesium stearate', 'calcium stearate',
+    // Sugars (may use bone char)
+    'sugar', 'brown sugar', 'confectioners sugar', 'powdered sugar',
+    'cane sugar', 'refined sugar',
+    // Processing aids
+    'cysteine', 'l-cysteine', 'enzymes', 'processing aids',
+    // Alcohol (may use animal products in processing)
+    'wine', 'beer', 'alcohol', 'ethanol'
+  ],
+  vegan: [
+    // Plant proteins
+    'soy protein', 'pea protein', 'rice protein', 'hemp protein', 'quinoa',
+    'lentils', 'chickpeas', 'black beans', 'kidney beans', 'tofu', 'tempeh',
+    'seitan', 'nutritional yeast',
+    // Plant milks
+    'soy milk', 'almond milk', 'oat milk', 'rice milk', 'coconut milk',
+    'cashew milk', 'hemp milk', 'pea milk',
+    // Vegetables and fruits
+    'tomato', 'onion', 'garlic', 'carrot', 'spinach', 'kale', 'broccoli',
+    'apple', 'banana', 'orange', 'lemon', 'lime', 'berries',
+    // Grains and cereals
+    'wheat', 'rice', 'oats', 'barley', 'corn', 'millet', 'buckwheat',
+    'amaranth', 'teff', 'spelled',
+    // Nuts and seeds
+    'almonds', 'walnuts', 'cashews', 'pistachios', 'sunflower seeds',
+    'pumpkin seeds', 'chia seeds', 'flax seeds', 'sesame seeds',
+    // Oils
+    'olive oil', 'coconut oil', 'sunflower oil', 'canola oil', 'avocado oil',
+    'sesame oil', 'grapeseed oil',
+    // Spices and herbs
+    'salt', 'pepper', 'turmeric', 'cumin', 'paprika', 'oregano', 'basil',
+    'thyme', 'rosemary', 'sage', 'cinnamon', 'ginger'
   ]
+};
+
+// Confidence scoring system
+export const CONFIDENCE_WEIGHTS = {
+  definitive_non_vegan: 1.0,
+  likely_non_vegan: 0.8,
+  unclear: 0.5,
+  likely_vegan: 0.2,
+  definitely_vegan: 0.0
+};
+
+// Common product types and their typical non-vegan ingredients
+export const PRODUCT_CATEGORIES = {
+  dairy: ['milk', 'cheese', 'yogurt', 'butter', 'cream'],
+  baked_goods: ['eggs', 'butter', 'milk', 'honey', 'lard'],
+  confectionery: ['gelatin', 'carmine', 'shellac', 'milk', 'honey'],
+  processed_foods: ['whey', 'casein', 'gelatin', 'natural flavors'],
+  beverages: ['milk', 'honey', 'carmine', 'isinglass']
 };
 
 // Sample vegan recipes
