@@ -54,116 +54,206 @@ const CameraCapture = ({ onImagesCapture, isProcessing = false }: CameraCaptureP
     setCameraError(null);
     
     try {
+      // Check if getUserMedia is supported
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Camera not supported in this browser. Please use a modern browser like Chrome, Firefox, or Safari.');
+      }
+
       // Check permissions first
       const permissionState = await checkCameraPermissions();
       console.log('Camera permission state:', permissionState);
       
       if (permissionState === 'denied') {
-        throw new Error('Camera permission denied. Please enable camera access in your browser settings.');
+        throw new Error('Camera permission denied. Please enable camera access in your browser settings and refresh the page.');
       }
 
-      // First try with ideal constraints
-      let constraints = {
-        video: {
-          facingMode,
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        },
-        audio: false
-      };
+      // Stop any existing stream first
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        setStream(null);
+      }
+
+      // Clear video element before setting new stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
 
       let mediaStream;
-      
-      try {
-        console.log('Requesting camera with constraints:', constraints);
-        mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (error) {
-        console.warn('High-res camera failed, trying fallback:', error);
-        
-        // Fallback to basic constraints
-        constraints = {
+      const constraintsList = [
+        // Try environment camera first (back camera on mobile)
+        {
           video: {
-            facingMode,
+            facingMode: { exact: facingMode },
+            width: { ideal: 1920, max: 1920 },
+            height: { ideal: 1080, max: 1080 }
+          },
+          audio: false
+        },
+        // Fallback without exact facingMode
+        {
+          video: {
+            facingMode: facingMode,
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 }
+          },
+          audio: false
+        },
+        // Basic constraints
+        {
+          video: {
             width: { ideal: 1280 },
             height: { ideal: 720 }
           },
           audio: false
-        };
-        
+        },
+        // Minimal constraints as last resort
+        {
+          video: true,
+          audio: false
+        }
+      ];
+
+      let lastError;
+      for (let i = 0; i < constraintsList.length; i++) {
         try {
+          const constraints = constraintsList[i];
+          console.log(`Attempting camera with constraints ${i + 1}:`, constraints);
           mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-        } catch (fallbackError) {
-          console.warn('Medium-res camera failed, trying minimal:', fallbackError);
+          console.log('Camera stream obtained successfully:', mediaStream);
           
-          // Final fallback - minimal constraints
-          constraints = {
-            video: true,
-            audio: false
-          };
+          // Verify stream has active tracks
+          const videoTracks = mediaStream.getVideoTracks();
+          if (videoTracks.length === 0) {
+            throw new Error('No video tracks available');
+          }
           
-          mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+          console.log('Video track info:', {
+            label: videoTracks[0].label,
+            settings: videoTracks[0].getSettings(),
+            constraints: videoTracks[0].getConstraints()
+          });
+          
+          break;
+        } catch (error) {
+          console.warn(`Camera attempt ${i + 1} failed:`, error);
+          lastError = error;
+          if (i === constraintsList.length - 1) {
+            throw error; // Last attempt failed
+          }
         }
       }
 
-      console.log('Camera stream obtained:', mediaStream);
+      if (!mediaStream) {
+        throw lastError || new Error('Failed to access camera');
+      }
+
       setStream(mediaStream);
       
-      if (videoRef.current && mediaStream) {
-        console.log('Setting video source');
-        videoRef.current.srcObject = mediaStream;
+      if (videoRef.current) {
+        console.log('Setting video source and preparing playback');
+        const video = videoRef.current;
         
-        // Wait for video to be ready
+        // Set video attributes for better compatibility
+        video.setAttribute('playsinline', 'true');
+        video.setAttribute('webkit-playsinline', 'true');
+        video.muted = true;
+        video.autoplay = true;
+        
+        video.srcObject = mediaStream;
+        
+        // Wait for video to be ready with timeout
         await new Promise<void>((resolve, reject) => {
-          if (!videoRef.current) {
-            reject(new Error('Video element not available'));
-            return;
-          }
+          const timeoutId = setTimeout(() => {
+            reject(new Error('Video loading timeout - camera may be in use by another application'));
+          }, 10000); // 10 second timeout
 
-          const video = videoRef.current;
+          const cleanup = () => {
+            clearTimeout(timeoutId);
+            video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+            video.removeEventListener('error', handleError);
+            video.removeEventListener('canplay', handleCanPlay);
+          };
           
           const handleLoadedMetadata = () => {
             console.log('Video metadata loaded, dimensions:', video.videoWidth, 'x', video.videoHeight);
-            video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-            video.removeEventListener('error', handleError);
+            if (video.videoWidth === 0 || video.videoHeight === 0) {
+              reject(new Error('Invalid video dimensions - camera may not be working properly'));
+              return;
+            }
+            cleanup();
             resolve();
+          };
+
+          const handleCanPlay = () => {
+            console.log('Video can play - ready for display');
+            if (video.videoWidth > 0 && video.videoHeight > 0) {
+              cleanup();
+              resolve();
+            }
           };
           
           const handleError = (error: Event) => {
             console.error('Video loading error:', error);
-            video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-            video.removeEventListener('error', handleError);
-            reject(new Error('Failed to load video'));
+            cleanup();
+            reject(new Error('Failed to load video stream'));
           };
           
           video.addEventListener('loadedmetadata', handleLoadedMetadata);
+          video.addEventListener('canplay', handleCanPlay);
           video.addEventListener('error', handleError);
           
-          // Trigger loading if not already loading
-          if (video.readyState >= 1) {
+          // Check if already loaded
+          if (video.readyState >= 2) {
             handleLoadedMetadata();
           }
         });
         
-        // Try to play the video
+        // Ensure video starts playing
         try {
-          await videoRef.current.play();
+          console.log('Starting video playback');
+          await video.play();
           console.log('Video playing successfully');
         } catch (playError) {
-          console.warn('Autoplay failed (this is normal in some browsers):', playError);
-          // Don't throw here, user interaction might be needed for autoplay
+          console.warn('Autoplay failed, will try manual play:', playError);
+          // Video will play when user interacts
         }
       }
       
       setIsActive(true);
       
       toast({
-        title: "Camera Started",
-        description: "Camera is ready for capturing",
+        title: "Camera Ready",
+        description: "Camera is now active and ready for capturing photos",
       });
       
     } catch (error) {
       console.error('Error accessing camera:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown camera error';
+      let errorMessage = 'Unknown camera error';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'object' && error !== null && 'name' in error) {
+        switch (error.name) {
+          case 'NotAllowedError':
+            errorMessage = 'Camera permission denied. Please allow camera access and refresh the page.';
+            break;
+          case 'NotFoundError':
+            errorMessage = 'No camera found. Please connect a camera and try again.';
+            break;
+          case 'NotReadableError':
+            errorMessage = 'Camera is being used by another application. Please close other apps using the camera.';
+            break;
+          case 'OverconstrainedError':
+            errorMessage = 'Camera constraints not supported. Trying with basic settings...';
+            break;
+          case 'SecurityError':
+            errorMessage = 'Camera access blocked by security settings. Please use HTTPS or allow camera access.';
+            break;
+          default:
+            errorMessage = `Camera error: ${error.name}`;
+        }
+      }
+      
       setCameraError(errorMessage);
       
       toast({
@@ -174,7 +264,7 @@ const CameraCapture = ({ onImagesCapture, isProcessing = false }: CameraCaptureP
     } finally {
       setIsInitializing(false);
     }
-  }, [facingMode, checkCameraPermissions]);
+  }, [facingMode, checkCameraPermissions, stream]);
 
   const stopCamera = useCallback(() => {
     if (stream) {
@@ -351,7 +441,7 @@ const CameraCapture = ({ onImagesCapture, isProcessing = false }: CameraCaptureP
 
           {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row gap-4">
-                        <Button
+            <Button
               onClick={() => {
                 haptics.tap();
                 startCamera();
@@ -383,6 +473,57 @@ const CameraCapture = ({ onImagesCapture, isProcessing = false }: CameraCaptureP
               Upload Photos
             </Button>
           </div>
+
+          {/* Camera Diagnostics (only show if there are issues) */}
+          {cameraError && (
+            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <h4 className="font-semibold text-red-800 mb-2">Camera Troubleshooting</h4>
+              <div className="space-y-2 text-sm text-red-700">
+                <p><strong>Error:</strong> {cameraError}</p>
+                <div className="space-y-1">
+                  <p><strong>Things to try:</strong></p>
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>Refresh the page and allow camera permissions when prompted</li>
+                    <li>Close other applications that might be using the camera</li>
+                    <li>Try a different browser (Chrome, Firefox, Safari)</li>
+                    <li>Make sure you're using HTTPS (not HTTP)</li>
+                    <li>Check if your camera is working in other applications</li>
+                  </ul>
+                </div>
+                <Button 
+                  onClick={async () => {
+                    // Show camera diagnostics
+                    console.log('=== CAMERA DIAGNOSTICS ===');
+                    try {
+                      const devices = await navigator.mediaDevices.enumerateDevices();
+                      const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                      console.log('Available cameras:', videoDevices);
+                      
+                      const permissions = await navigator.permissions.query({ name: 'camera' as PermissionName });
+                      console.log('Camera permission:', permissions.state);
+                      
+                      toast({
+                        title: "Diagnostics Complete",
+                        description: `Found ${videoDevices.length} camera(s). Check console for details.`,
+                      });
+                    } catch (error) {
+                      console.error('Diagnostics failed:', error);
+                      toast({
+                        title: "Diagnostics Failed",
+                        description: "Could not gather camera information",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                >
+                  Run Diagnostics
+                </Button>
+              </div>
+            </div>
+          )}
 
           <input
             ref={fileInputRef}
@@ -470,15 +611,45 @@ const CameraCapture = ({ onImagesCapture, isProcessing = false }: CameraCaptureP
         <div className="relative rounded-lg overflow-hidden bg-black">
           <video
             ref={videoRef}
-            className="w-full h-64 sm:h-80 object-cover"
+            className="w-full h-96 sm:h-[30rem] md:h-[36rem] lg:h-[40rem] object-cover"
             playsInline
             muted
             autoPlay
             webkit-playsinline="true"
+            style={{ objectFit: 'cover', transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
             onLoadStart={() => console.log('Video load started')}
             onLoadedData={() => console.log('Video data loaded')}
+            onLoadedMetadata={(e) => {
+              const video = e.target as HTMLVideoElement;
+              console.log('Video metadata loaded:', {
+                videoWidth: video.videoWidth,
+                videoHeight: video.videoHeight,
+                duration: video.duration,
+                readyState: video.readyState
+              });
+            }}
+            onCanPlay={() => console.log('Video can play')}
             onPlay={() => console.log('Video playing')}
-            onError={(e) => console.error('Video error:', e)}
+            onPause={() => console.log('Video paused')}
+            onError={(e) => {
+              const video = e.target as HTMLVideoElement;
+              console.error('Video error:', {
+                error: video.error,
+                networkState: video.networkState,
+                readyState: video.readyState
+              });
+            }}
+            onClick={async () => {
+              // Manual play on click if autoplay failed
+              if (videoRef.current?.paused) {
+                try {
+                  await videoRef.current.play();
+                  console.log('Manual play succeeded');
+                } catch (error) {
+                  console.error('Manual play failed:', error);
+                }
+              }
+            }}
           />
           
           {/* Loading indicator */}
@@ -517,6 +688,30 @@ const CameraCapture = ({ onImagesCapture, isProcessing = false }: CameraCaptureP
                 <Camera className="w-12 h-12 mx-auto mb-4 opacity-50" />
                 <p className="text-lg">Camera Initializing...</p>
               </div>
+            </div>
+          )}
+
+          {/* Manual play button for when video is paused */}
+          {stream && videoRef.current?.paused && !isInitializing && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+              <Button
+                onClick={async () => {
+                  if (videoRef.current) {
+                    try {
+                      await videoRef.current.play();
+                      console.log('Manual play successful');
+                    } catch (error) {
+                      console.error('Manual play failed:', error);
+                    }
+                  }
+                }}
+                size="lg"
+                className="bg-white/20 hover:bg-white/30 text-white border-white/50"
+                variant="outline"
+              >
+                <Camera className="w-6 h-6 mr-2" />
+                Tap to Start Video
+              </Button>
             </div>
           )}
           
