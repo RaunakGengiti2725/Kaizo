@@ -1,5 +1,6 @@
 import { VEGAN_RULES, VeganResult, CONFIDENCE_WEIGHTS, PRODUCT_CATEGORIES } from '@/data/veganData';
 import { geminiAI, AIAnalysisResult } from '@/services/geminiAI';
+import { userPreferences } from '@/services/userPreferences';
 
 export interface IngredientMatch {
   ingredient: string;
@@ -79,16 +80,19 @@ export interface VeganCheckResult {
 }
 
 // AI-Powered Analysis (Primary Method)
-export const checkVeganStatusWithAI = async (text: string, images?: Array<{ file: File; text: string; type: string }>): Promise<VeganCheckResult> => {
+export const checkVeganStatusWithAI = async (text: string, images?: Array<{ file: File; text: string; type: string }>, userId?: string): Promise<VeganCheckResult> => {
   try {
     let aiAnalysis: AIAnalysisResult;
     
+    // Get user allergies for enhanced analysis
+    const allergyWarnings = await userPreferences.getAllergyWarnings(userId);
+    
     if (images && images.length > 0) {
       // Use batch analysis for multiple images
-      aiAnalysis = await geminiAI.analyzeBatch(images);
+      aiAnalysis = await geminiAI.analyzeBatch(images, userId);
     } else {
-      // Text-only analysis
-      aiAnalysis = await geminiAI.analyzeIngredients(text);
+      // Text-only analysis with user preferences
+      aiAnalysis = await geminiAI.analyzeIngredients(text, undefined, userId);
     }
 
     // Convert AI analysis to VeganCheckResult format
@@ -134,12 +138,21 @@ export const checkVeganStatusWithAI = async (text: string, images?: Array<{ file
       veganScore: Math.round(aiAnalysis.confidence * 100),
       overallScore: Math.max(0, Math.min(100, Math.round((aiAnalysis.trustScore || aiAnalysis.confidence) * 100))),
       negatives: [
+        // Critical allergy warnings first
+        ...allergyWarnings.map(allergy => {
+          const hasAllergy = text.toLowerCase().includes(allergy.toLowerCase()) || 
+                           aiAnalysis.problematicIngredients.some(ing => ing.ingredient.toLowerCase().includes(allergy.toLowerCase())) ||
+                           aiAnalysis.veganIngredients.some(ing => ing.toLowerCase().includes(allergy.toLowerCase()));
+          return hasAllergy ? { label: `⚠️ ALLERGY ALERT: Contains ${allergy}`, severity: 'high' as const } : null;
+        }).filter(Boolean) as Array<{ label: string; severity: 'high' | 'medium' | 'low' }>,
+        
+        // Standard concerns
         ...(aiAnalysis.nutritionalInsights?.additives || []).map(add => ({ label: add, severity: 'medium' as const })),
         ...(aiAnalysis.ethicalRating?.palmOil?.concerns || []).map(concern => ({ label: concern, severity: 'high' as const })),
         ...(aiAnalysis.ethicalRating?.laborPractices?.concerns || []).map(concern => ({ label: concern, severity: 'medium' as const })),
         ...(aiAnalysis.environmentalImpact?.carbonFootprint?.level === 'high' ? [{ label: 'High carbon footprint', severity: 'medium' as const }] : []),
         ...(aiAnalysis.environmentalImpact?.waterUsage?.level === 'high' ? [{ label: 'High water usage', severity: 'medium' as const }] : [])
-      ].slice(0, 6),
+      ].slice(0, 8), // Increased to accommodate allergy warnings
       positives: [
         ...(aiAnalysis.nutritionalInsights?.proteinSources || []).map(p => ({ label: `Protein source: ${p}` })),
         ...(aiAnalysis.veganIngredients || []).slice(0, 2).map(v => ({ label: v })),

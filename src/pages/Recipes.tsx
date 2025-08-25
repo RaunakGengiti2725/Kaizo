@@ -7,6 +7,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { Clock } from 'lucide-react';
 import { useState } from 'react';
 import { geminiAI, type GeneratedRecipeCandidate, type GeneratedRecipeDetail } from '@/services/geminiAI';
+import { useAuth } from '@/contexts/AuthContext';
 import ChatWithGemini from '@/components/ChatWithGemini';
 
 const mealTypes = [
@@ -20,6 +21,7 @@ const cuisines = [
 ];
 
 const Recipes = () => {
+  const { user } = useAuth();
   const [mealType, setMealType] = useState<string | undefined>();
   const [proteinSource, setProteinSource] = useState<string | undefined>();
   const [cuisineOrFlavor, setCuisineOrFlavor] = useState<string | undefined>();
@@ -35,7 +37,7 @@ const Recipes = () => {
     setCandidates([]);
     setLoading(true);
     try {
-      const res = await geminiAI.generateRecipes({ mealType, proteinSource, cuisineOrFlavor, timeMinutes });
+      const res = await geminiAI.generateRecipes({ mealType, proteinSource, cuisineOrFlavor, timeMinutes }, user?.id);
       setCandidates(res);
     } catch (e: any) {
       setError(e?.message || 'Failed to generate recipes');
@@ -48,7 +50,7 @@ const Recipes = () => {
     setLoading(true);
     setError(null);
     try {
-      const detail = await geminiAI.expandRecipe(c);
+      const detail = await geminiAI.expandRecipe(c, user?.id);
       setSelected(detail);
     } catch (e: any) {
       setError(e?.message || 'Failed to load recipe');

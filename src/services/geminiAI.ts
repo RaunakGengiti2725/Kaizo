@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { userPreferences } from './userPreferences';
 
 export interface AIAnalysisResult {
   isVegan: 'vegan' | 'not-vegan' | 'unclear';
@@ -73,6 +74,8 @@ export interface AIAnalysisResult {
   recommendations: string[];
 }
 
+
+
 export interface GeneratedRecipeCandidate {
   id: string;
   title: string;
@@ -111,12 +114,12 @@ class GeminiAIService {
     return this.genAI !== null && this.model !== null;
   }
 
-  async analyzeIngredients(extractedText: string, imageBase64?: string): Promise<AIAnalysisResult> {
+  async analyzeIngredients(extractedText: string, imageBase64?: string, userId?: string): Promise<AIAnalysisResult> {
     if (!this.isConfigured()) {
       throw new Error('Gemini API key not configured. Please add VITE_GEMINI_API_KEY to your .env file.');
     }
 
-    const prompt = this.buildAnalysisPrompt(extractedText);
+    const prompt = await this.buildAnalysisPrompt(extractedText, userId);
 
     try {
       let result;
@@ -284,8 +287,18 @@ Return JSON ONLY in this exact shape:
     };
   }
 
-  private buildAnalysisPrompt(extractedText: string): string {
+  private async buildAnalysisPrompt(extractedText: string, userId?: string): Promise<string> {
+    // Get user preferences for personalized analysis
+    const userPrefs = await userPreferences.getPreferencesForAI(userId);
+    const allergyWarnings = await userPreferences.getAllergyWarnings(userId);
+    const dietaryPref = await userPreferences.getDietaryPreference(userId);
+
     return `You are an expert vegan nutritionist, environmental scientist, and ethical consumption specialist. Analyze the following product ingredients and provide a comprehensive assessment covering vegan status, environmental impact, and ethical considerations.
+
+USER PREFERENCES:
+${userPrefs}
+${allergyWarnings.length > 0 ? `CRITICAL ALLERGY ALERT: The user is allergic to: ${allergyWarnings.join(', ')}. If ANY of these ingredients are present, mark them with HIGHEST severity and include prominent warnings.` : ''}
+${dietaryPref ? `User follows a ${dietaryPref} diet. Tailor recommendations accordingly.` : ''}
 
 EXTRACTED TEXT FROM PRODUCT:
 "${extractedText}"
@@ -536,6 +549,165 @@ Please provide a helpful, accurate response about this recipe. Be conversational
 - Variations and customizations
 
 Keep your response concise but informative. If the question is about something not related to this recipe, politely redirect to recipe-related topics.`;
+  }
+
+  async generateRecipes(options: { mealType?: string; proteinSource?: string; cuisineOrFlavor?: string; timeMinutes?: number }, userId?: string): Promise<GeneratedRecipeCandidate[]> {
+    if (!this.isConfigured()) {
+      throw new Error('Gemini API key not configured. Please add VITE_GEMINI_API_KEY to your .env file.');
+    }
+
+    // Get user preferences for personalized recipes
+    const userPrefs = await userPreferences.getPreferencesForAI(userId);
+    const allergyWarnings = await userPreferences.getAllergyWarnings(userId);
+    const dietaryPref = await userPreferences.getDietaryPreference(userId);
+
+    const prompt = `You are an expert vegan chef and nutritionist. Generate 3 unique, delicious ${dietaryPref || 'vegan'} recipe ideas based on the user's preferences.
+
+USER PREFERENCES:
+${userPrefs}
+${allergyWarnings.length > 0 ? `CRITICAL: User is allergic to: ${allergyWarnings.join(', ')}. These ingredients MUST be completely avoided in all recipes.` : ''}
+
+RECIPE REQUIREMENTS:
+- Meal Type: ${options.mealType || 'Any'}
+- Protein Source: ${options.proteinSource || 'Any'}
+- Cuisine/Flavor: ${options.cuisineOrFlavor || 'Any'}
+- Time Limit: ${options.timeMinutes || 30} minutes max
+- Must be 100% ${dietaryPref || 'vegan'}
+- Safe for user's allergies
+
+Please respond with exactly 3 recipe ideas in this JSON format:
+[
+  {
+    "id": "unique-id-1",
+    "title": "Recipe Name",
+    "shortDescription": "Brief appetizing description (1-2 sentences)",
+    "timeMinutes": 25,
+    "mealType": "Breakfast",
+    "proteinSource": "Tofu",
+    "cuisine": "Asian"
+  },
+  // ... 2 more recipes
+]
+
+Make each recipe unique, appealing, and perfectly safe for the user's dietary restrictions and allergies.`;
+
+    try {
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      
+      // Parse JSON response
+      const jsonMatch = text.match(/\[\s*{[\s\S]*}\s*\]/);
+      if (!jsonMatch) {
+        throw new Error('Invalid response format from AI');
+      }
+      
+      const recipes = JSON.parse(jsonMatch[0]);
+      
+      // Validate and ensure required fields
+      return recipes.map((recipe: any, index: number) => ({
+        id: recipe.id || `recipe-${Date.now()}-${index}`,
+        title: recipe.title || 'Untitled Recipe',
+        shortDescription: recipe.shortDescription || 'Delicious vegan recipe',
+        timeMinutes: recipe.timeMinutes || options.timeMinutes || 30,
+        mealType: recipe.mealType || options.mealType,
+        proteinSource: recipe.proteinSource || options.proteinSource,
+        cuisine: recipe.cuisine || options.cuisineOrFlavor,
+      }));
+      
+    } catch (error) {
+      console.error('Recipe generation failed:', error);
+      throw new Error('Failed to generate recipes. Please try again.');
+    }
+  }
+
+  async expandRecipe(candidate: GeneratedRecipeCandidate, userId?: string): Promise<GeneratedRecipeDetail> {
+    if (!this.isConfigured()) {
+      throw new Error('Gemini AI not configured');
+    }
+
+    // Get user preferences for detailed recipe
+    const allergyWarnings = await userPreferences.getAllergyWarnings(userId);
+    const dietaryPref = await userPreferences.getDietaryPreference(userId);
+
+    const prompt = `You are an expert vegan chef. Expand this recipe idea into a complete, detailed recipe:
+
+RECIPE TO EXPAND:
+Title: ${candidate.title}
+Description: ${candidate.shortDescription}
+Time: ${candidate.timeMinutes} minutes
+Type: ${candidate.mealType || 'Any'}
+Protein: ${candidate.proteinSource || 'Various'}
+Cuisine: ${candidate.cuisine || 'Any'}
+
+USER SAFETY REQUIREMENTS:
+${allergyWarnings.length > 0 ? `CRITICAL ALLERGIES: User is allergic to ${allergyWarnings.join(', ')}. Do NOT include these ingredients.` : ''}
+- Must be 100% ${dietaryPref || 'vegan'}
+- All ingredients must be plant-based
+- Double-check all ingredients for hidden animal products
+
+Please provide a complete recipe in this JSON format:
+{
+  "id": "${candidate.id}",
+  "title": "${candidate.title}",
+  "shortDescription": "${candidate.shortDescription}",
+  "timeMinutes": ${candidate.timeMinutes},
+  "mealType": "${candidate.mealType || ''}",
+  "proteinSource": "${candidate.proteinSource || ''}",
+  "cuisine": "${candidate.cuisine || ''}",
+  "ingredients": [
+    "1 cup ingredient name",
+    "2 tbsp another ingredient",
+    // ... complete ingredient list
+  ],
+  "steps": [
+    "Step 1: Detailed instruction",
+    "Step 2: Next step",
+    // ... complete step-by-step instructions
+  ],
+  "servings": 4,
+  "nutrition": {
+    "calories": 350,
+    "proteinGrams": 15,
+    "carbsGrams": 45,
+    "fatGrams": 12
+  }
+}
+
+Make it practical, delicious, and safe for the user's dietary needs.`;
+
+    try {
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      
+      // Parse JSON response
+      const jsonMatch = text.match(/{\s*"id"[\s\S]*}/);
+      if (!jsonMatch) {
+        throw new Error('Invalid response format from AI');
+      }
+      
+      const recipe = JSON.parse(jsonMatch[0]);
+      
+      // Validate required fields
+      return {
+        id: recipe.id || candidate.id,
+        title: recipe.title || candidate.title,
+        shortDescription: recipe.shortDescription || candidate.shortDescription,
+        timeMinutes: recipe.timeMinutes || candidate.timeMinutes,
+        mealType: recipe.mealType || candidate.mealType,
+        proteinSource: recipe.proteinSource || candidate.proteinSource,
+        cuisine: recipe.cuisine || candidate.cuisine,
+        ingredients: recipe.ingredients || [],
+        steps: recipe.steps || [],
+        servings: recipe.servings || 4,
+        nutrition: recipe.nutrition || {},
+      };
+      
+    } catch (error) {
+      console.error('Recipe expansion failed:', error);
+      throw new Error('Failed to expand recipe. Please try again.');
+    }
   }
 }
 

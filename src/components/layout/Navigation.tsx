@@ -1,17 +1,22 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Scan, ChefHat, MapPin, Menu, X } from 'lucide-react';
+import { Scan, ChefHat, MapPin, Menu, X, Users, User, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 
 const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
+  const { user, signOut } = useAuth();
 
   const navItems = [
     { href: '/scan', label: 'Scan', icon: Scan },
     { href: '/recipes', label: 'Recipes', icon: ChefHat },
     { href: '/map', label: 'Restaurants', icon: MapPin },
+    { href: '/community', label: 'Community', icon: Users },
   ];
 
   const isActive = (path: string) => location.pathname === path;
@@ -50,6 +55,50 @@ const Navigation = () => {
                 </Link>
               );
             })}
+            
+            {/* User Menu */}
+            {user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="relative h-9 w-9 rounded-full">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage 
+                        src={user.user_metadata?.avatar_url} 
+                        alt={user.user_metadata?.full_name || user.email || 'User'} 
+                      />
+                      <AvatarFallback>
+                        {user.user_metadata?.full_name?.[0]?.toUpperCase() || 
+                         user.email?.[0]?.toUpperCase() || 'U'}
+                      </AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56" align="end" forceMount>
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium leading-none">
+                        {user.user_metadata?.full_name || 'User'}
+                      </p>
+                      <p className="text-xs leading-none text-muted-foreground">
+                        {user.email}
+                      </p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => signOut()}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Log out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Link to="/login">
+                <Button variant="outline" size="sm" className="flex items-center space-x-2">
+                  <User className="w-4 h-4" />
+                  <span>Sign In</span>
+                </Button>
+              </Link>
+            )}
           </div>
 
           {/* Mobile menu button */}
@@ -88,6 +137,54 @@ const Navigation = () => {
                   </Link>
                 );
               })}
+              
+              {/* Mobile User Section */}
+              <div className="pt-2 border-t border-border mt-2">
+                {user ? (
+                  <div className="space-y-2">
+                    <div className="px-3 py-2">
+                      <div className="flex items-center space-x-3">
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage 
+                            src={user.user_metadata?.avatar_url} 
+                            alt={user.user_metadata?.full_name || user.email || 'User'} 
+                          />
+                          <AvatarFallback>
+                            {user.user_metadata?.full_name?.[0]?.toUpperCase() || 
+                             user.email?.[0]?.toUpperCase() || 'U'}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex flex-col">
+                          <p className="text-sm font-medium">
+                            {user.user_metadata?.full_name || 'User'}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {user.email}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start space-x-2"
+                      onClick={() => {
+                        signOut();
+                        setIsOpen(false);
+                      }}
+                    >
+                      <LogOut className="w-4 h-4" />
+                      <span>Sign Out</span>
+                    </Button>
+                  </div>
+                ) : (
+                  <Link to="/login" onClick={() => setIsOpen(false)}>
+                    <Button variant="ghost" className="w-full justify-start space-x-2">
+                      <User className="w-4 h-4" />
+                      <span>Sign In</span>
+                    </Button>
+                  </Link>
+                )}
+              </div>
             </div>
           </div>
         )}
