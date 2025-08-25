@@ -168,6 +168,19 @@ const Scan = () => {
               </span>
             </div>
           </div>
+
+          {/* Scores */}
+          <div className="flex items-center justify-center gap-6">
+            <div className="text-center">
+              <div className="text-3xl font-bold">{result.veganScore ?? Math.round(result.confidence * 100)}</div>
+              <div className="text-sm text-muted-foreground">Vegan score</div>
+            </div>
+            <Separator orientation="vertical" className="h-10" />
+            <div className="text-center">
+              <div className="text-3xl font-bold">{result.overallScore ?? Math.round((result.trustScore || result.confidence) * 100)}</div>
+              <div className="text-sm text-muted-foreground">Overall</div>
+            </div>
+          </div>
           <Button 
             onClick={resetScan}
             variant="outline"
@@ -194,7 +207,7 @@ const Scan = () => {
             </TabsTrigger>
             <TabsTrigger value="suggestions" className="flex items-center gap-2">
               <Lightbulb className="w-4 h-4" />
-              Tips
+              Alternatives
             </TabsTrigger>
           </TabsList>
 
@@ -237,6 +250,38 @@ const Scan = () => {
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
+                {/* Negatives / Positives summary like Yuka */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <h4 className="font-semibold mb-2">Negatives</h4>
+                    <div className="space-y-2">
+                      {(result.negatives || []).map((n, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-2 rounded bg-destructive/5">
+                          <span className="text-sm">{n.label}</span>
+                          <span className={`w-2 h-2 rounded-full ${n.severity === 'high' ? 'bg-destructive' : n.severity === 'medium' ? 'bg-warning' : 'bg-muted-foreground'}`}></span>
+                        </div>
+                      ))}
+                      {(!result.negatives || result.negatives.length === 0) && (
+                        <div className="text-sm text-muted-foreground">No major concerns detected</div>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold mb-2">Positives</h4>
+                    <div className="space-y-2">
+                      {(result.positives || []).map((p, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-2 rounded bg-success/5">
+                          <span className="text-sm">{p.label}</span>
+                          <span className="w-2 h-2 rounded-full bg-success"></span>
+                        </div>
+                      ))}
+                      {(!result.positives || result.positives.length === 0) && (
+                        <div className="text-sm text-muted-foreground">No specific positives identified</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
                 {/* AI Analysis Badge */}
                 {result.aiAnalysis && (
                   <div className="flex items-center gap-2 mb-4">
@@ -441,24 +486,23 @@ const Scan = () => {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Lightbulb className="w-5 h-5" />
-                  Recommendations
+                  Better Alternatives
                 </CardTitle>
                 <CardDescription>
-                  Helpful tips based on your scan results
+                  Healthier or fully vegan substitutes for this product
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {result.suggestions?.map((suggestion, index) => (
+                {(result.alternatives || result.suggestions || []).map((alt, index) => (
                   <div key={index} className="flex items-start gap-3 p-4 bg-muted/50 rounded-lg">
                     <Lightbulb className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <span>{suggestion}</span>
+                    <span>{typeof alt === 'string' ? alt : alt.title}</span>
                   </div>
                 ))}
-                
-                {(!result.suggestions || result.suggestions.length === 0) && (
+                {(!result.alternatives || result.alternatives.length === 0) && (!result.suggestions || result.suggestions.length === 0) && (
                   <div className="text-center py-8 text-muted-foreground">
                     <Lightbulb className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>No specific suggestions available</p>
+                    <p>No alternatives available</p>
                   </div>
                 )}
               </CardContent>
@@ -472,7 +516,7 @@ const Scan = () => {
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-foreground mb-4">AI-Powered Vegan Scanner</h1>
+        <h1 className="text-4xl font-bold text-foreground mb-4">Kaizo - AI-Powered Vegan Scanner</h1>
         <p className="text-xl text-muted-foreground">
           Capture multiple angles of your product for the most accurate vegan analysis
         </p>

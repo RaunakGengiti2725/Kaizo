@@ -29,6 +29,11 @@ export interface VeganCheckResult {
     allergens?: string[];
     additives?: string[];
   };
+  veganScore?: number;
+  overallScore?: number;
+  negatives?: Array<{ label: string; value?: string; severity: 'high' | 'medium' | 'low' }>;
+  positives?: Array<{ label: string; value?: string }>;
+  alternatives?: Array<{ title: string; note?: string }>;
 }
 
 // AI-Powered Analysis (Primary Method)
@@ -81,7 +86,18 @@ export const checkVeganStatusWithAI = async (text: string, images?: Array<{ file
       aiAnalysis,
       trustScore: aiAnalysis.trustScore,
       certifications: aiAnalysis.productInfo.certifications,
-      nutritionalInsights: aiAnalysis.nutritionalInsights
+      nutritionalInsights: aiAnalysis.nutritionalInsights,
+      veganScore: Math.round(aiAnalysis.confidence * 100),
+      overallScore: Math.max(0, Math.min(100, Math.round((aiAnalysis.trustScore || aiAnalysis.confidence) * 100))),
+      negatives: [
+        ...(aiAnalysis.nutritionalInsights?.additives || []).map(add => ({ label: add, severity: 'medium' as const })),
+        ...(aiAnalysis.allergens || []).map(all => ({ label: all, severity: 'high' as const }))
+      ].slice(0, 6),
+      positives: [
+        ...(aiAnalysis.nutritionalInsights?.proteinSources || []).map(p => ({ label: `Protein source: ${p}` })),
+        ...(aiAnalysis.veganIngredients || []).slice(0, 4).map(v => ({ label: v }))
+      ],
+      alternatives: (aiAnalysis.recommendations || []).slice(0, 3).map(r => ({ title: r }))
     };
   } catch (error) {
     console.error('AI analysis failed, falling back to pattern matching:', error);

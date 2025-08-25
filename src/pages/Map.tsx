@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { MapPin, Search, Star, Navigation, Phone, Globe, Clock, DollarSign, Filter, Loader2, X, Utensils, AlertCircle, CheckCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,7 @@ const Map = () => {
   const [selectedRestaurant, setSelectedRestaurant] = useState<VeganRestaurant | null>(null);
   const [restaurants, setRestaurants] = useState<VeganRestaurant[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [searchStatus, setSearchStatus] = useState<'idle' | 'searching' | 'complete' | 'error'>('idle');
   const [showFilters, setShowFilters] = useState(false);
   const [useGoogleMaps, setUseGoogleMaps] = useState(true);
   
@@ -41,20 +42,22 @@ const Map = () => {
   // Check if Google Maps is configured
   const isGoogleMapsConfigured = googleMapsService.isConfigured();
 
-  // Filter local restaurants based on current filters (fallback)
-  const filteredLocalRestaurants = REAL_VEGAN_RESTAURANTS.filter(restaurant => {
-    if (filters.veganOnly && restaurant.type !== 'vegan') return false;
-    if (filters.rating && restaurant.rating < filters.rating) return false;
-    return true;
-  }).map(restaurant => ({
-    ...restaurant,
-    // Ensure local restaurants have the correct structure for VeganRestaurant interface
-    id: restaurant.id,
-    placeId: restaurant.id, // Use local id as placeId for local data
-    openNow: undefined, // Will be handled separately if needed
-    photos: [], // No photos for local data
-    reviews: [] // No reviews for local data
-  }));
+  // Memoize filtered local restaurants to avoid recalculation on every render
+  const filteredLocalRestaurants = useMemo(() => {
+    return REAL_VEGAN_RESTAURANTS.filter(restaurant => {
+      if (filters.veganOnly && restaurant.type !== 'vegan') return false;
+      if (filters.rating && restaurant.rating < filters.rating) return false;
+      return true;
+    }).map(restaurant => ({
+      ...restaurant,
+      // Ensure local restaurants have the correct structure for VeganRestaurant interface
+      id: restaurant.id,
+      placeId: restaurant.id, // Use local id as placeId for local data
+      openNow: undefined, // Will be handled separately if needed
+      photos: [], // No photos for local data
+      reviews: [] // No reviews for local data
+    }));
+  }, [filters.veganOnly, filters.rating]);
   
   console.log('🏪 Filtered local restaurants:', filteredLocalRestaurants.length);
   console.log('🍽️ Restaurants with vegan menus:', filteredLocalRestaurants.filter(r => r.veganMenu?.length).length);
@@ -83,14 +86,12 @@ const Map = () => {
           };
           setUserLocation(coords);
           
-          if (isGoogleMapsConfigured && useGoogleMaps) {
-            console.log('🌐 Using Google Maps search...');
-            await searchRestaurants(coords);
-          } else {
+          if (!isGoogleMapsConfigured || !useGoogleMaps) {
             console.log('🏪 Using local restaurant data...');
             console.log('📋 Setting restaurants:', filteredLocalRestaurants.length);
             setRestaurants(filteredLocalRestaurants);
           }
+          // For Google Maps, let useEffect handle the search to avoid duplicate calls
           
           toast({
             title: "Location found",
@@ -121,22 +122,25 @@ const Map = () => {
     if (!searchLocation.trim()) return;
     
     setIsLoading(true);
+    setSearchStatus('searching');
     
     if (isGoogleMapsConfigured && useGoogleMaps) {
       try {
         const coords = await googleMapsService.geocodeAddress(searchLocation);
         if (coords) {
           setUserLocation(coords);
-          await searchRestaurants(coords);
+          setSearchStatus('complete');
+          // Don't call searchRestaurants here - let useEffect handle it to avoid duplicate calls
           toast({
-            title: "Search complete",
-            description: `Found vegan restaurants in ${searchLocation}`,
+            title: "Location found",
+            description: `Searching for vegan restaurants in ${searchLocation}`,
           });
         } else {
           throw new Error('Location not found');
         }
       } catch (error) {
         console.error('Search error:', error);
+        setSearchStatus('error');
         toast({
           title: "Search error",
           description: "Could not find that location. Please try again.",
@@ -151,11 +155,13 @@ const Map = () => {
         console.log('📋 Setting restaurants:', filteredLocalRestaurants.length);
         setUserLocation(cityCoords);
         setRestaurants(filteredLocalRestaurants);
+        setSearchStatus('complete');
         toast({
           title: "Search complete",
           description: `Showing curated vegan restaurants in ${searchLocation}`,
         });
       } else {
+        setSearchStatus('error');
         toast({
           title: "City not found",
           description: "Try searching for a major city like New York, Los Angeles, or San Francisco.",
@@ -176,12 +182,23 @@ const Map = () => {
       return;
     }
     
+    setSearchStatus('searching');
+    
     try {
       const results = await googleMapsService.searchVeganRestaurants(location, filters);
       setRestaurants(results);
+      setSearchStatus('complete');
+      
+      if (results.length === 0) {
+        toast({
+          title: "No restaurants found",
+          description: "Try adjusting your filters or search a different area.",
+        });
+      }
     } catch (error) {
       console.error('Restaurant search error:', error);
       setRestaurants(filteredLocalRestaurants);
+      setSearchStatus('error');
       toast({
         title: "Search limited",
         description: "Using curated restaurant data. Configure Google Maps API for live results.",
@@ -217,8 +234,8 @@ const Map = () => {
           const googleMap = await googleMapsService.initializeMap(mapRef.current!, userLocation);
           setMap(googleMap);
           setIsMapReady(true);
-          // Now that the map and Places service are initialized, search for restaurants
-          await searchRestaurants(userLocation);
+          // Don't call searchRestaurants here - let the filters useEffect handle it
+          // to avoid duplicate calls when both initialization and filters change
         } catch (error) {
           console.error('Map initialization error:', error);
           setUseGoogleMaps(false);
@@ -296,7 +313,7 @@ const Map = () => {
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
       <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-foreground mb-4">Find Vegan Restaurants</h1>
+        <h1 className="text-4xl font-bold text-foreground mb-4">Restaurant Finder</h1>
         <p className="text-xl text-muted-foreground">
           Discover vegan restaurants and vegan-friendly options near you
         </p>
@@ -327,20 +344,47 @@ const Map = () => {
             </div>
             <Button 
               onClick={handleSearch}
+              disabled={isLoading || !searchLocation.trim()}
               className="bg-primary hover:bg-primary/90 shadow-glow transition-smooth"
             >
-              <Search className="w-4 h-4 mr-2" />
-              Search
+              {isLoading ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Search className="w-4 h-4 mr-2" />
+              )}
+              {isLoading ? 'Searching...' : 'Search'}
             </Button>
             <Button 
               onClick={getCurrentLocation}
+              disabled={isLoading}
               variant="outline"
               className="whitespace-nowrap"
             >
-              <Navigation className="w-4 h-4 mr-2" />
+              {isLoading ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Navigation className="w-4 h-4 mr-2" />
+              )}
               Use My Location
             </Button>
           </div>
+
+          {/* Search Progress */}
+          {searchStatus === 'searching' && (
+            <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <div className="flex items-center gap-3">
+                <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                    Searching for vegan restaurants...
+                  </p>
+                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                    This may take a few seconds for the best results
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Filters */}
           <div className="flex flex-col gap-4 pt-4 border-t border-border">
@@ -409,7 +453,7 @@ const Map = () => {
       {/* Map Placeholder */}
       <Card className="mb-8 shadow-card">
         <CardHeader>
-          <CardTitle>Map View</CardTitle>
+          <CardTitle>Restaurant Map</CardTitle>
           <CardDescription>
             Interactive map showing restaurant locations
           </CardDescription>
@@ -434,9 +478,17 @@ const Map = () => {
       {userLocation && (
         <div className="space-y-6">
           <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold">
-              {restaurants.length} Restaurant{restaurants.length !== 1 ? 's' : ''} Found
-              {isLoading && <Loader2 className="w-6 h-6 animate-spin ml-2 inline" />}
+            <h2 className="text-2xl font-bold flex items-center gap-2">
+              {searchStatus === 'searching' ? (
+                <>
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                  Searching for restaurants...
+                </>
+              ) : searchStatus === 'complete' ? (
+                `${restaurants.length} Restaurant${restaurants.length !== 1 ? 's' : ''} Found`
+              ) : (
+                `${restaurants.length} Restaurant${restaurants.length !== 1 ? 's' : ''} Found`
+              )}
             </h2>
             <div className="flex gap-2">
               <Badge variant="outline">
@@ -469,7 +521,34 @@ const Map = () => {
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {restaurants.map((restaurant) => (
+            {searchStatus === 'searching' ? (
+              // Skeleton loading cards
+              Array.from({ length: 6 }).map((_, index) => (
+                <Card key={index} className="shadow-card border-0 bg-gradient-card animate-pulse">
+                  <CardHeader>
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-2 flex-1">
+                        <div className="h-5 bg-muted rounded w-3/4"></div>
+                        <div className="h-4 bg-muted rounded w-1/2"></div>
+                      </div>
+                      <div className="h-6 bg-muted rounded-full w-20"></div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <div className="h-4 bg-muted rounded w-4"></div>
+                      <div className="h-4 bg-muted rounded w-16"></div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-4 bg-muted rounded w-4"></div>
+                      <div className="h-4 bg-muted rounded w-full"></div>
+                    </div>
+                    <div className="h-10 bg-muted rounded w-full"></div>
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              restaurants.map((restaurant) => (
               <Card 
                 key={restaurant.id} 
                 className="shadow-card hover:shadow-glow transition-smooth cursor-pointer border-0 bg-gradient-card"
@@ -532,7 +611,8 @@ const Map = () => {
                   </Button>
                 </CardContent>
               </Card>
-            ))}
+              ))
+            )}
           </div>
         </div>
       )}

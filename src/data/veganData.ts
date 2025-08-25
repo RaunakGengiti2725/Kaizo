@@ -151,7 +151,7 @@ export const REAL_VEGAN_RESTAURANTS = [
     veganOptions: ['Guac Burger', 'Mac and Cheese', 'Quinoa Taco Salad', 'Chocolate Chip Cookies']
   },
   {
-    id: '2', 
+    id: '2',
     name: 'Candle Cafe',
     type: 'vegan' as const,
     rating: 4.6,

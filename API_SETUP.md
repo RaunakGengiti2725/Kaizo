@@ -1,4 +1,4 @@
-# 🤖 AI-Powered Vegan Scanner - API Setup Guide
+# 🤖 Kaizo - AI-Powered Vegan Scanner - API Setup Guide
 
 ## 🎯 Why Use Gemini AI?
 
@@ -121,7 +121,7 @@ Without API key:
 1. **Clone and install**:
 ```bash
 git clone <your-repo>
-cd vegan-vision-ai
+cd kaizo
 npm install
 ```
 

@@ -1,5 +1,6 @@
 import { Loader } from '@googlemaps/js-api-loader';
 import { REAL_VEGAN_RESTAURANTS } from '@/data/veganData';
+import { searchCache } from './searchCache';
 
 export interface MenuItem {
   name: string;
@@ -116,39 +117,58 @@ class GoogleMapsService {
       throw new Error('Google Map not initialized');
     }
 
+    // Check cache first
+    const cacheKey = searchCache.generateSearchKey(location, filters);
+    const cachedResults = searchCache.get<VeganRestaurant[]>(cacheKey);
+    if (cachedResults) {
+      console.log('🚀 Using cached search results');
+      return cachedResults;
+    }
+
+    // Optimized search queries - fewer, more targeted searches
     const searchQueries = filters.veganOnly 
-      ? ['vegan restaurant', 'vegan food', 'plant based restaurant']
+      ? ['vegan restaurant', 'plant based restaurant']
       : [
-          // Mixed restaurants with great vegan options (prioritized)
-          'restaurant vegan options', 'vegetarian friendly restaurant', 'healthy restaurant',
-          'organic restaurant', 'farm to table restaurant', 'mediterranean restaurant',
-          'asian restaurant vegan', 'mexican restaurant vegan', 'italian restaurant vegan',
-          // Fully vegan places
+          // Most effective queries for mixed results
+          'restaurant vegan options', 'vegetarian restaurant', 'healthy restaurant',
           'vegan restaurant', 'plant based restaurant'
         ];
 
     const allResults: VeganRestaurant[] = [];
     const seenPlaceIds = new Set<string>();
 
-    for (const query of searchQueries) {
+    // Parallel processing for faster results
+    const searchPromises = searchQueries.map(async (query) => {
       try {
-        const results = await this.performTextSearch(query, location, filters);
-        
-        results.forEach(restaurant => {
-          if (!seenPlaceIds.has(restaurant.placeId || restaurant.id)) {
-            seenPlaceIds.add(restaurant.placeId || restaurant.id);
-            allResults.push(restaurant);
-          }
-        });
+        return await this.performTextSearch(query, location, filters);
       } catch (error) {
         console.warn(`Search failed for query "${query}":`, error);
+        return [];
       }
-    }
+    });
 
-    // Sort by rating and relevance
-    return allResults
+    // Wait for all searches to complete in parallel
+    const allSearchResults = await Promise.all(searchPromises);
+    
+    // Flatten and deduplicate results
+    allSearchResults.forEach(results => {
+      results.forEach(restaurant => {
+        if (!seenPlaceIds.has(restaurant.placeId || restaurant.id)) {
+          seenPlaceIds.add(restaurant.placeId || restaurant.id);
+          allResults.push(restaurant);
+        }
+      });
+    });
+
+    // Sort by rating and relevance, limit results
+    const finalResults = allResults
       .sort((a, b) => b.rating - a.rating)
-      .slice(0, 50); // Limit to top 50 results
+      .slice(0, 30); // Reduced from 50 to 30 for faster rendering
+
+    // Cache results for 5 minutes
+    searchCache.set(cacheKey, finalResults, 5 * 60 * 1000);
+
+    return finalResults;
   }
 
   private performTextSearch(
@@ -173,6 +193,7 @@ class GoogleMapsService {
         if (status === google.maps.places.PlacesServiceStatus.OK && results) {
           let restaurants = results
             .filter(place => place.geometry?.location)
+            .slice(0, 20) // Limit initial results for faster processing
             .map(place => this.placeToRestaurant(place))
             .filter(restaurant => {
               if (filters.rating && restaurant.rating < filters.rating) return false;
@@ -181,22 +202,31 @@ class GoogleMapsService {
               return true;
             });
 
-          // If openNow filter is requested, get detailed info for each restaurant
+          // Only fetch detailed info if absolutely necessary and do it efficiently
           if (filters.openNow) {
-            const detailedRestaurants = await Promise.all(
-              restaurants.map(async (restaurant) => {
-                if (restaurant.placeId) {
-                  try {
-                    const details = await this.getRestaurantDetails(restaurant.placeId);
-                    return { ...restaurant, ...details };
-                  } catch (error) {
-                    console.warn(`Failed to get details for ${restaurant.name}:`, error);
-                    return restaurant;
-                  }
-                }
+            // Use cached details where possible and batch uncached requests
+            const detailPromises = restaurants.map(async (restaurant) => {
+              if (!restaurant.placeId) return restaurant;
+              
+              const cacheKey = searchCache.generateDetailsKey(restaurant.placeId);
+              const cachedDetails = searchCache.get<Partial<VeganRestaurant>>(cacheKey);
+              
+              if (cachedDetails) {
+                return { ...restaurant, ...cachedDetails };
+              }
+              
+              try {
+                const details = await this.getRestaurantDetails(restaurant.placeId);
+                // Cache details for 15 minutes
+                searchCache.set(cacheKey, details, 15 * 60 * 1000);
+                return { ...restaurant, ...details };
+              } catch (error) {
+                console.warn(`Failed to get details for ${restaurant.name}:`, error);
                 return restaurant;
-              })
-            );
+              }
+            });
+            
+            const detailedRestaurants = await Promise.all(detailPromises);
             
             // Filter by openNow after getting details
             restaurants = detailedRestaurants.filter(restaurant => 
@@ -537,14 +567,27 @@ class GoogleMapsService {
       await this.initialize();
     }
 
+    // Check cache first
+    const cacheKey = searchCache.generateGeocodeKey(address);
+    const cachedResult = searchCache.get<{ lat: number; lng: number }>(cacheKey);
+    if (cachedResult) {
+      console.log('🚀 Using cached geocoding result');
+      return cachedResult;
+    }
+
     return new Promise((resolve) => {
       this.geocoder!.geocode({ address }, (results, status) => {
         if (status === 'OK' && results && results[0]) {
           const location = results[0].geometry.location;
-          resolve({
+          const result = {
             lat: location.lat(),
             lng: location.lng()
-          });
+          };
+          
+          // Cache for 1 hour
+          searchCache.set(cacheKey, result, 60 * 60 * 1000);
+          
+          resolve(result);
         } else {
           console.warn(`Geocoding failed: ${status}`);
           resolve(null);
