@@ -11,7 +11,7 @@ const Navigation = () => {
   const navItems = [
     { href: '/scan', label: 'Scan', icon: Scan },
     { href: '/recipes', label: 'Recipes', icon: ChefHat },
-    { href: '/map', label: 'Map', icon: MapPin },
+    { href: '/map', label: 'Restaurants', icon: MapPin },
   ];
 
   const isActive = (path: string) => location.pathname === path;
@@ -23,9 +23,9 @@ const Navigation = () => {
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-2">
             <div className="w-8 h-8 bg-gradient-primary rounded-lg flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">V</span>
+              <span className="text-primary-foreground font-bold text-sm">K</span>
             </div>
-            <span className="font-semibold text-lg text-foreground">Vegan Vision</span>
+            <span className="font-semibold text-lg text-foreground">Kaizo</span>
           </Link>
 
           {/* Desktop Navigation */}

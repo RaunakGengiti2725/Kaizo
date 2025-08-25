@@ -22,7 +22,7 @@ const Index = () => {
     },
     {
       icon: MapPin,
-      title: 'Locate Restaurants',
+      title: 'Find Restaurants',
       description: 'Find vegan restaurants and vegan-friendly options nearby',
       href: '/map',
       color: 'text-warning'
