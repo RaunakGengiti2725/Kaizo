@@ -59,7 +59,7 @@ const Recipes = () => {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
-      <h1 className="text-2xl mb-4">Generate AI Recipes</h1>
+      <h1 className="text-4xl font-bold text-foreground mb-4">Generate AI Recipes</h1>
       <Card className="mb-6">
         <CardHeader>
           <CardTitle>Customize your recipe</CardTitle>

@@ -79,6 +79,24 @@ const CameraCapture = ({ onImagesCapture, isProcessing = false }: CameraCaptureP
       }
 
       let mediaStream;
+
+      // Try to select a specific camera device when available
+      let preferredDeviceId: string | undefined;
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoInputs = devices.filter(d => d.kind === 'videoinput');
+        console.log('Detected video inputs:', videoInputs.map(v => ({ label: v.label, deviceId: v.deviceId })));
+
+        // Prefer back camera on mobile if label suggests it, otherwise first device
+        const backCam = videoInputs.find(v => /back|rear|environment/i.test(v.label));
+        const frontCam = videoInputs.find(v => /front|user/i.test(v.label));
+        if (facingMode === 'environment' && backCam) preferredDeviceId = backCam.deviceId;
+        else if (facingMode === 'user' && frontCam) preferredDeviceId = frontCam.deviceId;
+        else if (videoInputs[0]) preferredDeviceId = videoInputs[0].deviceId;
+      } catch (e) {
+        console.warn('Could not enumerate devices (this can be normal before permission granted):', e);
+      }
+
       const constraintsList = [
         // Try environment camera first (back camera on mobile)
         {
@@ -89,6 +107,15 @@ const CameraCapture = ({ onImagesCapture, isProcessing = false }: CameraCaptureP
           },
           audio: false
         },
+        // Try by deviceId explicitly if available
+        preferredDeviceId ? {
+          video: {
+            deviceId: { exact: preferredDeviceId },
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 }
+          },
+          audio: false
+        } : null,
         // Fallback without exact facingMode
         {
           video: {
@@ -111,7 +138,7 @@ const CameraCapture = ({ onImagesCapture, isProcessing = false }: CameraCaptureP
           video: true,
           audio: false
         }
-      ];
+      ].filter(Boolean) as MediaStreamConstraints[];
 
       let lastError;
       for (let i = 0; i < constraintsList.length; i++) {
@@ -156,10 +183,17 @@ const CameraCapture = ({ onImagesCapture, isProcessing = false }: CameraCaptureP
         // Set video attributes for better compatibility
         video.setAttribute('playsinline', 'true');
         video.setAttribute('webkit-playsinline', 'true');
+        // Also set properties directly
+        // Some TS configs don't include playsInline on HTMLVideoElement; set via attribute above
         video.muted = true;
         video.autoplay = true;
         
-        video.srcObject = mediaStream;
+        // Attach only video tracks to avoid oddities with audio
+        const videoOnlyStream = new MediaStream(mediaStream.getVideoTracks());
+        video.srcObject = videoOnlyStream;
+        
+        // Force load and play
+        video.load();
         
         // Wait for video to be ready with timeout
         await new Promise<void>((resolve, reject) => {
@@ -176,16 +210,24 @@ const CameraCapture = ({ onImagesCapture, isProcessing = false }: CameraCaptureP
           
           const handleLoadedMetadata = () => {
             console.log('Video metadata loaded, dimensions:', video.videoWidth, 'x', video.videoHeight);
+            console.log('Video element size:', video.clientWidth, 'x', video.clientHeight);
+            console.log('Video ready state:', video.readyState);
+            
+            // Don't reject for 0 dimensions immediately, some browsers need more time
             if (video.videoWidth === 0 || video.videoHeight === 0) {
-              reject(new Error('Invalid video dimensions - camera may not be working properly'));
-              return;
+              console.warn('Video dimensions are 0, waiting for canplay event...');
+              return; // Let canplay handle it
             }
             cleanup();
             resolve();
           };
 
           const handleCanPlay = () => {
-            console.log('Video can play - ready for display');
+            console.log('Video can play - ready for display', {
+              width: video.videoWidth,
+              height: video.videoHeight,
+              trackState: (videoOnlyStream.getVideoTracks()[0] || mediaStream.getVideoTracks()[0])?.readyState
+            });
             if (video.videoWidth > 0 && video.videoHeight > 0) {
               cleanup();
               resolve();
@@ -213,6 +255,20 @@ const CameraCapture = ({ onImagesCapture, isProcessing = false }: CameraCaptureP
           console.log('Starting video playback');
           await video.play();
           console.log('Video playing successfully');
+          
+          // Additional check after play - if still black, force refresh
+          setTimeout(() => {
+            if (video.videoWidth === 0 || video.videoHeight === 0) {
+              console.log('Video still has no dimensions, forcing refresh...');
+              video.pause();
+              // Re-attach stream and try again
+              const refreshedStream = new MediaStream((video.srcObject as MediaStream).getVideoTracks());
+              video.srcObject = refreshedStream;
+              video.load();
+              video.play().catch(console.warn);
+            }
+          }, 1000);
+          
         } catch (playError) {
           console.warn('Autoplay failed, will try manual play:', playError);
           // Video will play when user interacts
@@ -611,12 +667,17 @@ const CameraCapture = ({ onImagesCapture, isProcessing = false }: CameraCaptureP
         <div className="relative rounded-lg overflow-hidden bg-black">
           <video
             ref={videoRef}
-            className="w-full h-96 sm:h-[30rem] md:h-[36rem] lg:h-[40rem] object-cover"
+            className="w-full h-96 sm:h-[30rem] md:h-[36rem] lg:h-[40rem] object-cover bg-black"
             playsInline
             muted
             autoPlay
             webkit-playsinline="true"
-            style={{ objectFit: 'cover', transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
+            style={{ 
+              objectFit: 'cover', 
+              transform: facingMode === 'user' ? 'scaleX(-1)' : 'none',
+              minHeight: '384px',
+              display: 'block'
+            }}
             onLoadStart={() => console.log('Video load started')}
             onLoadedData={() => console.log('Video data loaded')}
             onLoadedMetadata={(e) => {
