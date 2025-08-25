@@ -10,6 +10,11 @@ import Scan from "./pages/Scan";
 import Recipes from "./pages/Recipes";
 import Map from "./pages/Map";
 import NotFound from "./pages/NotFound";
+import Community from "./pages/Community";
+import Login from "./pages/Login";
+import Onboarding from "./pages/Onboarding";
+import ProtectedRoute from "./components/ProtectedRoute";
+import { AuthProvider } from "./contexts/AuthContext";
 
 const queryClient = new QueryClient();
 
@@ -19,23 +24,30 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Layout>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/scan" element={<Scan />} />
-            <Route
-              path="/recipes"
-              element={
-                <ErrorBoundary>
-                  <Recipes />
-                </ErrorBoundary>
-              }
-            />
-            <Route path="/map" element={<Map />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </Layout>
+        <AuthProvider>
+          <Layout>
+            <Routes>
+              <Route path="/onboarding" element={<Onboarding />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+              <Route path="/scan" element={<ProtectedRoute><Scan /></ProtectedRoute>} />
+              <Route
+                path="/recipes"
+                element={
+                  <ProtectedRoute>
+                    <ErrorBoundary>
+                      <Recipes />
+                    </ErrorBoundary>
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="/map" element={<ProtectedRoute><Map /></ProtectedRoute>} />
+              <Route path="/community" element={<ProtectedRoute><Community /></ProtectedRoute>} />
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Layout>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
