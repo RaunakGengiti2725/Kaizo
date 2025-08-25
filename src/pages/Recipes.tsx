@@ -1,244 +1,185 @@
-import { useState, useMemo } from 'react';
-import { Search, Clock, ChefHat } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { VEGAN_RECIPES } from '@/data/veganData';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { VEGAN_RECIPES, Recipe } from '@/data/veganData';
-import recipesFeatureImage from '@/assets/recipes-feature.jpg';
+import { Button } from '@/components/ui/button';
+import { Slider } from '@/components/ui/slider';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import { Clock } from 'lucide-react';
+import { useState } from 'react';
+import { geminiAI, type GeneratedRecipeCandidate, type GeneratedRecipeDetail } from '@/services/geminiAI';
+import ChatWithGemini from '@/components/ChatWithGemini';
+
+const mealTypes = [
+  'Breakfast','Lunch','Dinner','Snacks','Desserts','Drinks/Smoothies','Appetizers/Sides','Meal Prep/Bulk'
+];
+const proteinSources = [
+  'Tofu/Tempeh','Beans/Lentils','Seitan/Soy-based','Chickpeas','Nuts & Seeds','Quinoa/Whole Grains','High-Protein (25g+ per serving)'
+];
+const cuisines = [
+  'Asian','Indian','Mexican','Italian','American/Comfort','Mediterranean','Fusion/Modern','Spicy','Sweet','Savory','Tangy'
+];
 
 const Recipes = () => {
-  const [searchIngredients, setSearchIngredients] = useState('');
-  const [maxTime, setMaxTime] = useState<string>('');
+  const [mealType, setMealType] = useState<string | undefined>();
+  const [proteinSource, setProteinSource] = useState<string | undefined>();
+  const [cuisineOrFlavor, setCuisineOrFlavor] = useState<string | undefined>();
+  const [timeMinutes, setTimeMinutes] = useState<number>(30);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [candidates, setCandidates] = useState<GeneratedRecipeCandidate[]>([]);
+  const [selected, setSelected] = useState<GeneratedRecipeDetail | null>(null);
 
-  const filteredRecipes = useMemo(() => {
-    if (!searchIngredients.trim()) return VEGAN_RECIPES;
+  const onGenerate = async () => {
+    setError(null);
+    setSelected(null);
+    setCandidates([]);
+    setLoading(true);
+    try {
+      const res = await geminiAI.generateRecipes({ mealType, proteinSource, cuisineOrFlavor, timeMinutes });
+      setCandidates(res);
+    } catch (e: any) {
+      setError(e?.message || 'Failed to generate recipes');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const userIngredients = searchIngredients
-      .toLowerCase()
-      .split(',')
-      .map(ing => ing.trim())
-      .filter(ing => ing.length > 0);
-
-    if (userIngredients.length === 0) return VEGAN_RECIPES;
-
-    const scoredRecipes = VEGAN_RECIPES.map(recipe => {
-      const recipeIngredients = recipe.ingredients.map(ing => ing.toLowerCase());
-      const matchCount = userIngredients.filter(userIng => 
-        recipeIngredients.some(recipeIng => 
-          recipeIng.includes(userIng) || userIng.includes(recipeIng)
-        )
-      ).length;
-      
-      const missing = recipe.ingredients.filter(recipeIng => 
-        !userIngredients.some(userIng => 
-          recipeIng.toLowerCase().includes(userIng) || userIng.includes(recipeIng.toLowerCase())
-        )
-      );
-
-      return {
-        ...recipe,
-        matchCount,
-        missing,
-        score: matchCount / recipe.ingredients.length
-      };
-    })
-    .filter(recipe => recipe.matchCount > 0)
-    .sort((a, b) => b.score - a.score);
-
-    return scoredRecipes;
-  }, [searchIngredients]);
-
-  const timeFilteredRecipes = useMemo(() => {
-    if (!maxTime) return filteredRecipes;
-    const timeLimit = parseInt(maxTime);
-    return filteredRecipes.filter(recipe => recipe.time <= timeLimit);
-  }, [filteredRecipes, maxTime]);
-
-  const getMissingIngredients = (recipe: Recipe & { missing?: string[] }) => {
-    if (!recipe.missing) return [];
-    return recipe.missing;
+  const onPick = async (c: GeneratedRecipeCandidate) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const detail = await geminiAI.expandRecipe(c);
+      setSelected(detail);
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load recipe');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
-      <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-foreground mb-4">Vegan Recipes</h1>
-        <p className="text-xl text-muted-foreground">
-          Find delicious vegan recipes based on ingredients you have
-        </p>
-      </div>
-
-      {/* Search Section */}
-      <Card className="mb-8 shadow-card bg-gradient-card border-0">
-        <CardHeader className="text-center">
-          <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
-            <ChefHat className="w-10 h-10 text-primary" />
-          </div>
-          <CardTitle>What ingredients do you have?</CardTitle>
-          <CardDescription>
-            Enter ingredients separated by commas (e.g., "avocado, pasta, garlic")
-          </CardDescription>
+      <h1 className="text-2xl mb-4">Generate AI Recipes</h1>
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Customize your recipe</CardTitle>
+          <CardDescription>Choose filters and generate 3 vegan recipe options</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
-            <Input
-              placeholder="Enter ingredients you have..."
-              value={searchIngredients}
-              onChange={(e) => setSearchIngredients(e.target.value)}
-              className="pl-10 text-lg py-6"
-            />
-          </div>
-          
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <Select value={maxTime} onValueChange={setMaxTime}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Max cooking time" />
-                </SelectTrigger>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="text-sm font-medium">Meal Type</label>
+              <Select value={mealType} onValueChange={setMealType}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Select meal type" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Any time</SelectItem>
-                  <SelectItem value="15">15 minutes</SelectItem>
-                  <SelectItem value="30">30 minutes</SelectItem>
-                  <SelectItem value="60">1 hour</SelectItem>
+                  {mealTypes.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            <Button 
-              onClick={() => {
-                setSearchIngredients('');
-                setMaxTime('');
-              }}
-              variant="outline"
-              className="sm:w-auto"
-            >
-              Clear Filters
-            </Button>
+            <div>
+              <label className="text-sm font-medium">Protein Source</label>
+              <Select value={proteinSource} onValueChange={setProteinSource}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Select protein" /></SelectTrigger>
+                <SelectContent>
+                  {proteinSources.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Cuisine / Flavor</label>
+              <Select value={cuisineOrFlavor} onValueChange={setCuisineOrFlavor}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Select cuisine or flavor" /></SelectTrigger>
+                <SelectContent>
+                  {cuisines.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
-          {/* Demo Image */}
-          <div className="flex justify-center mt-6">
-            <img 
-              src={recipesFeatureImage} 
-              alt="Fresh vegan ingredients"
-              className="max-w-sm rounded-lg shadow-soft"
-            />
+          <div>
+            <label className="text-sm font-medium">Time to cook: {timeMinutes} min</label>
+            <div className="mt-2">
+              <Slider defaultValue={[30]} min={10} max={60} step={5} onValueChange={(v) => setTimeMinutes(v[0])} />
+            </div>
           </div>
+
+          <div className="flex gap-2">
+            <Button onClick={onGenerate} disabled={loading}>Generate 3 recipes</Button>
+            <Button variant="outline" onClick={() => { setMealType(undefined); setProteinSource(undefined); setCuisineOrFlavor(undefined); setTimeMinutes(30); setCandidates([]); setSelected(null); setError(null); }} disabled={loading}>Clear</Button>
+          </div>
+
+          {error && <p className="text-destructive">{error}</p>}
         </CardContent>
       </Card>
 
-      {/* Results Count */}
-      {searchIngredients && (
-        <div className="mb-6">
-          <p className="text-muted-foreground">
-            Found {timeFilteredRecipes.length} recipe{timeFilteredRecipes.length !== 1 ? 's' : ''} 
-            {maxTime && ` under ${maxTime} minutes`}
-          </p>
+      {candidates.length > 0 && !selected && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {candidates.map((c) => (
+            <Card key={c.id} className="border">
+              <CardHeader>
+                <CardTitle className="text-lg">{c.title}</CardTitle>
+                <CardDescription>{c.shortDescription}</CardDescription>
+                <div className="text-sm text-muted-foreground">~{c.timeMinutes} min {c.mealType ? `• ${c.mealType}` : ''} {c.cuisine ? `• ${c.cuisine}` : ''}</div>
+              </CardHeader>
+              <CardContent>
+                <Button onClick={() => onPick(c)} disabled={loading} className="w-full">View full recipe</Button>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
 
-      {/* Recipe Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {timeFilteredRecipes.map((recipe) => {
-          const missing = getMissingIngredients(recipe);
-          const hasMatch = 'matchCount' in recipe;
-          
-          return (
-            <Card key={recipe.id} className="shadow-card hover:shadow-glow transition-smooth border-0 bg-gradient-card">
-              <div className="aspect-video bg-muted rounded-t-lg overflow-hidden">
-                <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary-light/20 flex items-center justify-center">
-                  <ChefHat className="w-12 h-12 text-primary" />
-                </div>
+      {selected && (
+        <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Recipe Details - Left Side */}
+          <Card>
+            <CardHeader>
+              <CardTitle>{selected.title}</CardTitle>
+              <CardDescription>{selected.shortDescription}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-sm text-muted-foreground">
+                ~{selected.timeMinutes} min
+                {selected.mealType && ` • ${selected.mealType}`}
+                {selected.cuisine && ` • ${selected.cuisine}`}
+                {selected.proteinSource && ` • ${selected.proteinSource}`}
               </div>
-              
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <CardTitle className="text-lg">{recipe.title}</CardTitle>
-                  <Badge variant="secondary" className="ml-2">
-                    <Clock className="w-3 h-3 mr-1" />
-                    {recipe.time}m
-                  </Badge>
-                </div>
-                <CardDescription>{recipe.description}</CardDescription>
-              </CardHeader>
-              
-              <CardContent className="space-y-4">
-                {/* Ingredients */}
+
+              <div>
+                <h3 className="font-semibold mb-2">Ingredients</h3>
+                <ul className="list-disc pl-6 space-y-1">
+                  {selected.ingredients.map((i, idx) => <li key={idx}>{i}</li>)}
+                </ul>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-2">Instructions</h3>
+                <ol className="list-decimal pl-6 space-y-1">
+                  {selected.steps.map((s, idx) => <li key={idx}>{s}</li>)}
+                </ol>
+              </div>
+
+              {selected.nutrition && (
                 <div>
-                  <h4 className="font-semibold text-sm mb-2">Ingredients:</h4>
-                  <div className="flex flex-wrap gap-1">
-                    {recipe.ingredients.map((ingredient, index) => (
-                      <Badge 
-                        key={index} 
-                        variant="outline" 
-                        className="text-xs"
-                      >
-                        {ingredient}
-                      </Badge>
-                    ))}
+                  <h3 className="font-semibold mb-2">Nutrition (per serving)</h3>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    {selected.nutrition.calories && <div>Calories: {selected.nutrition.calories}</div>}
+                    {selected.nutrition.proteinGrams && <div>Protein: {selected.nutrition.proteinGrams}g</div>}
+                    {selected.nutrition.carbsGrams && <div>Carbs: {selected.nutrition.carbsGrams}g</div>}
+                    {selected.nutrition.fatGrams && <div>Fat: {selected.nutrition.fatGrams}g</div>}
                   </div>
                 </div>
+              )}
 
-                {/* Missing ingredients if search is active */}
-                {hasMatch && missing.length > 0 && (
-                  <div>
-                    <h4 className="font-semibold text-sm mb-2 text-muted-foreground">
-                      You're missing:
-                    </h4>
-                    <div className="flex flex-wrap gap-1">
-                      {missing.map((ingredient, index) => (
-                        <Badge 
-                          key={index} 
-                          variant="secondary"
-                          className="text-xs opacity-60"
-                        >
-                          {ingredient}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setSelected(null)}>Back to options</Button>
+              </div>
+            </CardContent>
+          </Card>
 
-                {/* Match indicator */}
-                {hasMatch && (
-                  <div className="pt-2 border-t border-border">
-                    <Badge className="bg-success text-success-foreground">
-                      {((recipe as any).matchCount)} ingredients match
-                    </Badge>
-                  </div>
-                )}
-
-                <Button className="w-full bg-primary hover:bg-primary/90 transition-smooth">
-                  View Recipe
-                </Button>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
-      {/* Empty State */}
-      {timeFilteredRecipes.length === 0 && searchIngredients && (
-        <Card className="shadow-card text-center py-12">
-          <CardContent>
-            <ChefHat className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No recipes found</h3>
-            <p className="text-muted-foreground mb-4">
-              Try different ingredients or remove the time filter
-            </p>
-            <Button 
-              onClick={() => {
-                setSearchIngredients('');
-                setMaxTime('');
-              }}
-              variant="outline"
-            >
-              Show All Recipes
-            </Button>
-          </CardContent>
-        </Card>
+          {/* Chat with Gemini - Right Side */}
+          <ChatWithGemini recipe={selected} />
+        </div>
       )}
     </div>
   );

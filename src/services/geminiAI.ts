@@ -31,6 +31,28 @@ export interface AIAnalysisResult {
   recommendations: string[];
 }
 
+export interface GeneratedRecipeCandidate {
+  id: string;
+  title: string;
+  shortDescription: string;
+  timeMinutes: number;
+  mealType?: string;
+  proteinSource?: string;
+  cuisine?: string;
+}
+
+export interface GeneratedRecipeDetail extends GeneratedRecipeCandidate {
+  ingredients: string[];
+  steps: string[];
+  servings?: number;
+  nutrition?: {
+    calories?: number;
+    proteinGrams?: number;
+    carbsGrams?: number;
+    fatGrams?: number;
+  };
+}
+
 class GeminiAIService {
   private genAI: GoogleGenerativeAI | null = null;
   private model: any = null;
@@ -83,6 +105,141 @@ class GeminiAIService {
       console.error('Gemini AI analysis failed:', error);
       throw new Error('AI analysis failed. Please try again.');
     }
+  }
+
+  async generateRecipes(params: {
+    mealType?: string;
+    proteinSource?: string;
+    cuisineOrFlavor?: string;
+    timeMinutes?: number;
+  }): Promise<GeneratedRecipeCandidate[]> {
+    if (!this.isConfigured()) {
+      throw new Error('Gemini API key not configured. Please add VITE_GEMINI_API_KEY to your .env file.');
+    }
+
+    const prompt = this.buildRecipePrompt(params);
+
+    try {
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      return this.parseRecipeCandidates(text);
+    } catch (error) {
+      console.error('Gemini recipe generation failed:', error);
+      throw new Error('Recipe generation failed. Please try again.');
+    }
+  }
+
+  async expandRecipe(candidate: GeneratedRecipeCandidate): Promise<GeneratedRecipeDetail> {
+    if (!this.isConfigured()) {
+      throw new Error('Gemini API key not configured. Please add VITE_GEMINI_API_KEY to your .env file.');
+    }
+
+    const prompt = this.buildRecipeDetailPrompt(candidate);
+    try {
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      return this.parseRecipeDetail(text, candidate);
+    } catch (error) {
+      console.error('Gemini recipe detail generation failed:', error);
+      throw new Error('Could not fetch full recipe. Please try another option.');
+    }
+  }
+
+  private buildRecipePrompt(params: {
+    mealType?: string;
+    proteinSource?: string;
+    cuisineOrFlavor?: string;
+    timeMinutes?: number;
+  }): string {
+    const parts: string[] = [];
+    if (params.mealType) parts.push(`Meal Type: ${params.mealType}`);
+    if (params.proteinSource) parts.push(`Protein Source: ${params.proteinSource}`);
+    if (params.cuisineOrFlavor) parts.push(`Cuisine/Flavor: ${params.cuisineOrFlavor}`);
+    if (params.timeMinutes) parts.push(`Max Time: ${params.timeMinutes} minutes`);
+
+    return `You are a helpful vegan chef. Generate exactly THREE distinct vegan recipe ideas that match the user's filters.
+
+USER FILTERS:
+${parts.join('\n') || 'None provided'}
+
+Return JSON ONLY in this exact shape:
+{
+  "recipes": [
+    {"id": "r1", "title": "...", "shortDescription": "...", "timeMinutes": 25, "mealType": "...", "proteinSource": "...", "cuisine": "..."},
+    {"id": "r2", "title": "...", "shortDescription": "...", "timeMinutes": 35, "mealType": "...", "proteinSource": "...", "cuisine": "..."},
+    {"id": "r3", "title": "...", "shortDescription": "...", "timeMinutes": 45, "mealType": "...", "proteinSource": "...", "cuisine": "..."}
+  ]
+}`;
+  }
+
+  private buildRecipeDetailPrompt(candidate: GeneratedRecipeCandidate): string {
+    return `Create a complete VEGAN recipe based on this candidate.
+
+CANDIDATE:
+${JSON.stringify(candidate, null, 2)}
+
+Return JSON ONLY in this exact shape:
+{
+  "id": "${candidate.id}",
+  "title": "...",
+  "shortDescription": "...",
+  "timeMinutes": ${candidate.timeMinutes || 30},
+  "mealType": "${candidate.mealType || ''}",
+  "proteinSource": "${candidate.proteinSource || ''}",
+  "cuisine": "${candidate.cuisine || ''}",
+  "ingredients": ["..."],
+  "steps": ["..."],
+  "servings": 2,
+  "nutrition": {"calories": 480, "proteinGrams": 25, "carbsGrams": 60, "fatGrams": 15}
+}`;
+  }
+
+  private parseRecipeCandidates(aiText: string): GeneratedRecipeCandidate[] {
+    const jsonMatch = aiText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('No JSON found for recipe candidates');
+    }
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (!parsed.recipes || !Array.isArray(parsed.recipes)) {
+      throw new Error('Invalid recipe candidates format');
+    }
+    return parsed.recipes.map((r: any, idx: number) => ({
+      id: r.id || `r${idx + 1}`,
+      title: r.title || `Recipe ${idx + 1}`,
+      shortDescription: r.shortDescription || 'A tasty vegan dish.',
+      timeMinutes: Number(r.timeMinutes) || 30,
+      mealType: r.mealType,
+      proteinSource: r.proteinSource,
+      cuisine: r.cuisine,
+    }));
+  }
+
+  private parseRecipeDetail(aiText: string, fallback: GeneratedRecipeCandidate): GeneratedRecipeDetail {
+    const jsonMatch = aiText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      // Fallback minimal detail
+      return {
+        ...fallback,
+        ingredients: ['1 cup ingredient A', '1 cup ingredient B'],
+        steps: ['Step 1', 'Step 2', 'Step 3'],
+      };
+    }
+    const r = JSON.parse(jsonMatch[0]);
+    return {
+      id: r.id || fallback.id,
+      title: r.title || fallback.title,
+      shortDescription: r.shortDescription || fallback.shortDescription,
+      timeMinutes: Number(r.timeMinutes) || fallback.timeMinutes,
+      mealType: r.mealType || fallback.mealType,
+      proteinSource: r.proteinSource || fallback.proteinSource,
+      cuisine: r.cuisine || fallback.cuisine,
+      ingredients: Array.isArray(r.ingredients) ? r.ingredients : ['Step 1', 'Step 2'],
+      steps: Array.isArray(r.steps) ? r.steps : ['Mix and cook.'],
+      servings: r.servings,
+      nutrition: r.nutrition,
+    };
   }
 
   private buildAnalysisPrompt(extractedText: string): string {
@@ -216,12 +373,62 @@ Be helpful, educational, and honest about uncertainties. If information is uncle
 
     // Use the primary ingredients image if available, otherwise use the first image
     const primaryImage = images.find(img => img.type === 'ingredients') || images[0];
-    
+
     if (primaryImage) {
       return this.analyzeWithImage(primaryImage.file, combinedText);
     } else {
       return this.analyzeIngredients(combinedText);
     }
+  }
+
+  async chatAboutRecipe(recipe: GeneratedRecipeDetail, userMessage: string): Promise<string> {
+    if (!this.isConfigured()) {
+      throw new Error('Gemini API key not configured. Please add VITE_GEMINI_API_KEY to your .env file.');
+    }
+
+    const prompt = this.buildChatPrompt(recipe, userMessage);
+
+    try {
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      return response.text();
+    } catch (error) {
+      console.error('Gemini chat failed:', error);
+      throw new Error('Chat failed. Please try again.');
+    }
+  }
+
+  private buildChatPrompt(recipe: GeneratedRecipeDetail, userMessage: string): string {
+    const recipeInfo = `
+RECIPE: ${recipe.title}
+DESCRIPTION: ${recipe.shortDescription}
+TIME: ${recipe.timeMinutes} minutes
+MEAL TYPE: ${recipe.mealType || 'Not specified'}
+PROTEIN: ${recipe.proteinSource || 'Not specified'}
+CUISINE: ${recipe.cuisine || 'Not specified'}
+INGREDIENTS: ${recipe.ingredients.join(', ')}
+INSTRUCTIONS: ${recipe.steps.join(' | ')}
+SERVINGS: ${recipe.servings || 'Not specified'}
+NUTRITION: ${recipe.nutrition ? JSON.stringify(recipe.nutrition) : 'Not specified'}
+`;
+
+    return `You are a helpful vegan cooking assistant. A user is asking about this specific recipe:
+
+${recipeInfo}
+
+USER QUESTION: "${userMessage}"
+
+Please provide a helpful, accurate response about this recipe. Be conversational and friendly. You can help with:
+- Ingredient substitutions or alternatives
+- Cooking techniques and tips
+- Dietary modifications (allergies, preferences)
+- Scaling the recipe
+- Nutritional questions
+- Serving suggestions
+- Storage and reheating advice
+- Variations and customizations
+
+Keep your response concise but informative. If the question is about something not related to this recipe, politely redirect to recipe-related topics.`;
   }
 }
 

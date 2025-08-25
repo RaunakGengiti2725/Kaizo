@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Layout from "./components/layout/Layout";
+import ErrorBoundary from "./components/ErrorBoundary";
 import Index from "./pages/Index";
 import Scan from "./pages/Scan";
 import Recipes from "./pages/Recipes";
@@ -22,7 +23,14 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/scan" element={<Scan />} />
-            <Route path="/recipes" element={<Recipes />} />
+            <Route
+              path="/recipes"
+              element={
+                <ErrorBoundary>
+                  <Recipes />
+                </ErrorBoundary>
+              }
+            />
             <Route path="/map" element={<Map />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
