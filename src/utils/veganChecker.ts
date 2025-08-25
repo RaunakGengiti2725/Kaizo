@@ -29,6 +29,48 @@ export interface VeganCheckResult {
     allergens?: string[];
     additives?: string[];
   };
+  environmentalImpact?: {
+    carbonFootprint?: {
+      score: number;
+      level: 'low' | 'medium' | 'high';
+      details: string;
+      factors?: string[];
+    };
+    waterUsage?: {
+      score: number;
+      level: 'low' | 'medium' | 'high';
+      details: string;
+      estimatedLiters?: number;
+    };
+    packaging?: {
+      recyclable: boolean;
+      materials: string[];
+      sustainabilityScore: number;
+    };
+  };
+  ethicalRating?: {
+    overallScore: number;
+    palmOil?: {
+      present: boolean;
+      sustainable: boolean | 'unclear';
+      certification?: string;
+      concerns?: string[];
+    };
+    fairTrade?: {
+      certified: boolean;
+      certification?: string;
+      details?: string;
+    };
+    laborPractices?: {
+      score: number;
+      concerns?: string[];
+      certifications?: string[];
+    };
+    animalTesting?: {
+      policy: 'not-tested' | 'tested' | 'unclear';
+      details?: string;
+    };
+  };
   veganScore?: number;
   overallScore?: number;
   negatives?: Array<{ label: string; value?: string; severity: 'high' | 'medium' | 'low' }>;
@@ -87,16 +129,24 @@ export const checkVeganStatusWithAI = async (text: string, images?: Array<{ file
       trustScore: aiAnalysis.trustScore,
       certifications: aiAnalysis.productInfo.certifications,
       nutritionalInsights: aiAnalysis.nutritionalInsights,
+      environmentalImpact: aiAnalysis.environmentalImpact,
+      ethicalRating: aiAnalysis.ethicalRating,
       veganScore: Math.round(aiAnalysis.confidence * 100),
       overallScore: Math.max(0, Math.min(100, Math.round((aiAnalysis.trustScore || aiAnalysis.confidence) * 100))),
       negatives: [
         ...(aiAnalysis.nutritionalInsights?.additives || []).map(add => ({ label: add, severity: 'medium' as const })),
-        ...(aiAnalysis.allergens || []).map(all => ({ label: all, severity: 'high' as const }))
+        ...(aiAnalysis.ethicalRating?.palmOil?.concerns || []).map(concern => ({ label: concern, severity: 'high' as const })),
+        ...(aiAnalysis.ethicalRating?.laborPractices?.concerns || []).map(concern => ({ label: concern, severity: 'medium' as const })),
+        ...(aiAnalysis.environmentalImpact?.carbonFootprint?.level === 'high' ? [{ label: 'High carbon footprint', severity: 'medium' as const }] : []),
+        ...(aiAnalysis.environmentalImpact?.waterUsage?.level === 'high' ? [{ label: 'High water usage', severity: 'medium' as const }] : [])
       ].slice(0, 6),
       positives: [
         ...(aiAnalysis.nutritionalInsights?.proteinSources || []).map(p => ({ label: `Protein source: ${p}` })),
-        ...(aiAnalysis.veganIngredients || []).slice(0, 4).map(v => ({ label: v }))
-      ],
+        ...(aiAnalysis.veganIngredients || []).slice(0, 2).map(v => ({ label: v })),
+        ...(aiAnalysis.ethicalRating?.fairTrade?.certified ? [{ label: `Fair Trade: ${aiAnalysis.ethicalRating.fairTrade.certification}` }] : []),
+        ...(aiAnalysis.ethicalRating?.animalTesting?.policy === 'not-tested' ? [{ label: 'Not tested on animals' }] : []),
+        ...(aiAnalysis.environmentalImpact?.packaging?.recyclable ? [{ label: 'Recyclable packaging' }] : [])
+      ].slice(0, 6),
       alternatives: (aiAnalysis.recommendations || []).slice(0, 3).map(r => ({ title: r }))
     };
   } catch (error) {

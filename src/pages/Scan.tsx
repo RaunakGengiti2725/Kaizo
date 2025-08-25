@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Camera, Upload, Loader2, CheckCircle, XCircle, AlertTriangle, Brain, Zap, Target, TrendingUp, Info, Lightbulb } from 'lucide-react';
+import { Camera, Upload, Loader2, CheckCircle, XCircle, AlertTriangle, Brain, Zap, Target, TrendingUp, Info, Lightbulb, Leaf, Droplets, TreePine, Recycle, Shield, Users, Award, FlaskConical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -169,8 +169,8 @@ const Scan = () => {
             </div>
           </div>
 
-          {/* Scores */}
-          <div className="flex items-center justify-center gap-6">
+                          {/* Scores */}
+          <div className="flex items-center justify-center gap-4">
             <div className="text-center">
               <div className="text-3xl font-bold">{result.veganScore ?? Math.round(result.confidence * 100)}</div>
               <div className="text-sm text-muted-foreground">Vegan score</div>
@@ -180,6 +180,30 @@ const Scan = () => {
               <div className="text-3xl font-bold">{result.overallScore ?? Math.round((result.trustScore || result.confidence) * 100)}</div>
               <div className="text-sm text-muted-foreground">Overall</div>
             </div>
+            {result.environmentalImpact?.carbonFootprint && (
+              <>
+                <Separator orientation="vertical" className="h-10" />
+                <div className="text-center">
+                  <div className="text-3xl font-bold text-green-600">{result.environmentalImpact.carbonFootprint.score}</div>
+                  <div className="text-sm text-muted-foreground flex items-center gap-1">
+                    <Leaf className="w-3 h-3" />
+                    Carbon
+                  </div>
+                </div>
+              </>
+            )}
+            {result.ethicalRating?.overallScore && (
+              <>
+                <Separator orientation="vertical" className="h-10" />
+                <div className="text-center">
+                  <div className="text-3xl font-bold text-blue-600">{result.ethicalRating.overallScore}</div>
+                  <div className="text-sm text-muted-foreground flex items-center gap-1">
+                    <Shield className="w-3 h-3" />
+                    Ethics
+                  </div>
+                </div>
+              </>
+            )}
           </div>
           <Button 
             onClick={resetScan}
@@ -192,10 +216,18 @@ const Scan = () => {
         </div>
 
         <Tabs defaultValue="analysis" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="analysis" className="flex items-center gap-2">
               <Brain className="w-4 h-4" />
               Analysis
+            </TabsTrigger>
+            <TabsTrigger value="environmental" className="flex items-center gap-2">
+              <Leaf className="w-4 h-4" />
+              Environment
+            </TabsTrigger>
+            <TabsTrigger value="ethical" className="flex items-center gap-2">
+              <Shield className="w-4 h-4" />
+              Ethics
             </TabsTrigger>
             <TabsTrigger value="ingredients" className="flex items-center gap-2">
               <Target className="w-4 h-4" />
@@ -253,7 +285,10 @@ const Scan = () => {
                 {/* Negatives / Positives summary like Yuka */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <h4 className="font-semibold mb-2">Negatives</h4>
+                    <h4 className="font-semibold mb-2 flex items-center gap-2">
+                      <XCircle className="w-4 h-4 text-destructive" />
+                      Concerns
+                    </h4>
                     <div className="space-y-2">
                       {(result.negatives || []).map((n, idx) => (
                         <div key={idx} className="flex items-center justify-between p-2 rounded bg-destructive/5">
@@ -267,7 +302,10 @@ const Scan = () => {
                     </div>
                   </div>
                   <div>
-                    <h4 className="font-semibold mb-2">Positives</h4>
+                    <h4 className="font-semibold mb-2 flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-success" />
+                      Positives
+                    </h4>
                     <div className="space-y-2">
                       {(result.positives || []).map((p, idx) => (
                         <div key={idx} className="flex items-center justify-between p-2 rounded bg-success/5">
@@ -281,6 +319,92 @@ const Scan = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* Quick Environmental and Ethical Overview */}
+                {(result.environmentalImpact || result.ethicalRating) && (
+                  <>
+                    <Separator />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Environmental Quick View */}
+                      {result.environmentalImpact && (
+                        <div className="bg-green-50 p-4 rounded-lg">
+                          <h4 className="font-semibold mb-3 flex items-center gap-2 text-green-800">
+                            <Leaf className="w-4 h-4" />
+                            Environmental Impact
+                          </h4>
+                          <div className="space-y-2">
+                            {result.environmentalImpact.carbonFootprint && (
+                              <div className="flex items-center justify-between text-sm">
+                                <span>Carbon footprint</span>
+                                <Badge variant="outline" className={`${result.environmentalImpact.carbonFootprint.level === 'low' ? 'border-green-500 text-green-700' : 
+                                                                    result.environmentalImpact.carbonFootprint.level === 'medium' ? 'border-yellow-500 text-yellow-700' : 'border-red-500 text-red-700'}`}>
+                                  {result.environmentalImpact.carbonFootprint.level}
+                                </Badge>
+                              </div>
+                            )}
+                            {result.environmentalImpact.waterUsage && (
+                              <div className="flex items-center justify-between text-sm">
+                                <span>Water usage</span>
+                                <Badge variant="outline" className={`${result.environmentalImpact.waterUsage.level === 'low' ? 'border-blue-500 text-blue-700' : 
+                                                                     result.environmentalImpact.waterUsage.level === 'medium' ? 'border-yellow-500 text-yellow-700' : 'border-red-500 text-red-700'}`}>
+                                  {result.environmentalImpact.waterUsage.level}
+                                </Badge>
+                              </div>
+                            )}
+                            {result.environmentalImpact.packaging && (
+                              <div className="flex items-center justify-between text-sm">
+                                <span>Packaging</span>
+                                <Badge variant="outline" className={result.environmentalImpact.packaging.recyclable ? 'border-green-500 text-green-700' : 'border-gray-500 text-gray-700'}>
+                                  {result.environmentalImpact.packaging.recyclable ? 'Recyclable' : 'Not recyclable'}
+                                </Badge>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Ethical Quick View */}
+                      {result.ethicalRating && (
+                        <div className="bg-blue-50 p-4 rounded-lg">
+                          <h4 className="font-semibold mb-3 flex items-center gap-2 text-blue-800">
+                            <Shield className="w-4 h-4" />
+                            Ethical Practices
+                          </h4>
+                          <div className="space-y-2">
+                            {result.ethicalRating.palmOil && (
+                              <div className="flex items-center justify-between text-sm">
+                                <span>Palm oil</span>
+                                <Badge variant="outline" className={!result.ethicalRating.palmOil.present ? 'border-green-500 text-green-700' : 
+                                                                   result.ethicalRating.palmOil.sustainable === true ? 'border-green-500 text-green-700' : 'border-red-500 text-red-700'}>
+                                  {!result.ethicalRating.palmOil.present ? 'Free' : 
+                                   result.ethicalRating.palmOil.sustainable === true ? 'Sustainable' : 'Concerning'}
+                                </Badge>
+                              </div>
+                            )}
+                            {result.ethicalRating.fairTrade && (
+                              <div className="flex items-center justify-between text-sm">
+                                <span>Fair trade</span>
+                                <Badge variant="outline" className={result.ethicalRating.fairTrade.certified ? 'border-blue-500 text-blue-700' : 'border-gray-500 text-gray-700'}>
+                                  {result.ethicalRating.fairTrade.certified ? 'Certified' : 'Not certified'}
+                                </Badge>
+                              </div>
+                            )}
+                            {result.ethicalRating.animalTesting && (
+                              <div className="flex items-center justify-between text-sm">
+                                <span>Animal testing</span>
+                                <Badge variant="outline" className={result.ethicalRating.animalTesting.policy === 'not-tested' ? 'border-green-500 text-green-700' : 
+                                                                   result.ethicalRating.animalTesting.policy === 'tested' ? 'border-red-500 text-red-700' : 'border-gray-500 text-gray-700'}>
+                                  {result.ethicalRating.animalTesting.policy === 'not-tested' ? 'Cruelty-free' : 
+                                   result.ethicalRating.animalTesting.policy === 'tested' ? 'Tested' : 'Unclear'}
+                                </Badge>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
 
                 {/* AI Analysis Badge */}
                 {result.aiAnalysis && (
@@ -341,6 +465,333 @@ const Scan = () => {
                     </div>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="environmental" className="space-y-6">
+            {/* Environmental Impact Overview */}
+            <Card className="shadow-card border-0">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Leaf className="w-5 h-5 text-success" />
+                  Environmental Impact Assessment
+                </CardTitle>
+                <CardDescription>
+                  Carbon footprint, water usage, and packaging sustainability analysis
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {result.environmentalImpact ? (
+                  <>
+                    {/* Carbon Footprint */}
+                    {result.environmentalImpact.carbonFootprint && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <TreePine className="w-5 h-5 text-muted-foreground" />
+                            <h4 className="font-semibold">Carbon Footprint</h4>
+                          </div>
+                          <Badge 
+                            variant={result.environmentalImpact.carbonFootprint.level === 'low' ? 'default' : 
+                                    result.environmentalImpact.carbonFootprint.level === 'medium' ? 'secondary' : 'destructive'}
+                            className={result.environmentalImpact.carbonFootprint.level === 'low' ? 'bg-success text-success-foreground' : ''}
+                          >
+                            {result.environmentalImpact.carbonFootprint.level} impact
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="flex-1">
+                            <Progress 
+                              value={result.environmentalImpact.carbonFootprint.score} 
+                              className="h-2"
+                            />
+                          </div>
+                          <div className="text-2xl font-bold text-primary">
+                            {result.environmentalImpact.carbonFootprint.score}/100
+                          </div>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {result.environmentalImpact.carbonFootprint.details}
+                        </p>
+                        {result.environmentalImpact.carbonFootprint.factors && result.environmentalImpact.carbonFootprint.factors.length > 0 && (
+                          <div className="space-y-2">
+                            <h5 className="text-sm font-semibold">Key factors:</h5>
+                            <ul className="space-y-1">
+                              {result.environmentalImpact.carbonFootprint.factors.map((factor, idx) => (
+                                <li key={idx} className="text-sm text-muted-foreground flex items-center gap-2">
+                                  <div className="w-1 h-1 bg-primary rounded-full" />
+                                  {factor}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <Separator />
+
+                    {/* Water Usage */}
+                    {result.environmentalImpact.waterUsage && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Droplets className="w-5 h-5 text-blue-500" />
+                            <h4 className="font-semibold">Water Usage</h4>
+                          </div>
+                          <Badge 
+                            variant={result.environmentalImpact.waterUsage.level === 'low' ? 'default' : 
+                                    result.environmentalImpact.waterUsage.level === 'medium' ? 'secondary' : 'destructive'}
+                            className={result.environmentalImpact.waterUsage.level === 'low' ? 'bg-blue-100 text-blue-800' : ''}
+                          >
+                            {result.environmentalImpact.waterUsage.level} usage
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="flex-1">
+                            <Progress 
+                              value={result.environmentalImpact.waterUsage.score} 
+                              className="h-2"
+                            />
+                          </div>
+                          <div className="text-2xl font-bold text-blue-600">
+                            {result.environmentalImpact.waterUsage.score}/100
+                          </div>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {result.environmentalImpact.waterUsage.details}
+                        </p>
+                        {result.environmentalImpact.waterUsage.estimatedLiters && (
+                          <div className="bg-blue-50 p-3 rounded-lg">
+                            <div className="text-sm font-semibold text-blue-800">
+                              Estimated water footprint: {result.environmentalImpact.waterUsage.estimatedLiters} liters
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <Separator />
+
+                    {/* Packaging */}
+                    {result.environmentalImpact.packaging && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Recycle className="w-5 h-5 text-green-600" />
+                            <h4 className="font-semibold">Packaging Sustainability</h4>
+                          </div>
+                          <Badge 
+                            variant={result.environmentalImpact.packaging.recyclable ? 'default' : 'secondary'}
+                            className={result.environmentalImpact.packaging.recyclable ? 'bg-green-100 text-green-800' : ''}
+                          >
+                            {result.environmentalImpact.packaging.recyclable ? 'Recyclable' : 'Not recyclable'}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="flex-1">
+                            <Progress 
+                              value={result.environmentalImpact.packaging.sustainabilityScore} 
+                              className="h-2"
+                            />
+                          </div>
+                          <div className="text-2xl font-bold text-green-600">
+                            {result.environmentalImpact.packaging.sustainabilityScore}/100
+                          </div>
+                        </div>
+                        {result.environmentalImpact.packaging.materials.length > 0 && (
+                          <div className="space-y-2">
+                            <h5 className="text-sm font-semibold">Packaging materials:</h5>
+                            <div className="flex flex-wrap gap-2">
+                              {result.environmentalImpact.packaging.materials.map((material, idx) => (
+                                <Badge key={idx} variant="outline" className="text-xs">
+                                  {material}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Leaf className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <p>Environmental impact data not available</p>
+                    <p className="text-sm">This analysis requires AI processing with complete product information</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="ethical" className="space-y-6">
+            {/* Ethical Rating Overview */}
+            <Card className="shadow-card border-0">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-primary" />
+                  Ethical Rating Assessment
+                </CardTitle>
+                <CardDescription>
+                  Fair trade, labor practices, palm oil sustainability, and animal testing policies
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {result.ethicalRating ? (
+                  <>
+                    {/* Overall Ethical Score */}
+                    <div className="text-center p-6 bg-gradient-to-r from-primary/5 to-primary/10 rounded-lg">
+                      <div className="text-4xl font-bold text-primary mb-2">
+                        {result.ethicalRating.overallScore}/100
+                      </div>
+                      <div className="text-sm text-muted-foreground">Overall Ethical Score</div>
+                      <Progress value={result.ethicalRating.overallScore} className="mt-3 max-w-xs mx-auto" />
+                    </div>
+
+                    {/* Palm Oil Assessment */}
+                    {result.ethicalRating.palmOil && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <TreePine className="w-5 h-5 text-orange-500" />
+                            <h4 className="font-semibold">Palm Oil</h4>
+                          </div>
+                          <Badge 
+                            variant={!result.ethicalRating.palmOil.present ? 'default' :
+                                    result.ethicalRating.palmOil.sustainable === true ? 'secondary' : 'destructive'}
+                            className={!result.ethicalRating.palmOil.present ? 'bg-success text-success-foreground' : 
+                                      result.ethicalRating.palmOil.sustainable === true ? 'bg-green-100 text-green-800' : ''}
+                          >
+                            {!result.ethicalRating.palmOil.present ? 'Palm oil free' :
+                             result.ethicalRating.palmOil.sustainable === true ? 'Sustainable' :
+                             result.ethicalRating.palmOil.sustainable === 'unclear' ? 'Unclear' : 'Unsustainable'}
+                          </Badge>
+                        </div>
+                        {result.ethicalRating.palmOil.certification && (
+                          <div className="bg-green-50 p-3 rounded-lg">
+                            <div className="text-sm font-semibold text-green-800">
+                              Certification: {result.ethicalRating.palmOil.certification}
+                            </div>
+                          </div>
+                        )}
+                        {result.ethicalRating.palmOil.concerns && result.ethicalRating.palmOil.concerns.length > 0 && (
+                          <div className="space-y-1">
+                            {result.ethicalRating.palmOil.concerns.map((concern, idx) => (
+                              <div key={idx} className="text-sm text-destructive flex items-center gap-2">
+                                <AlertTriangle className="w-3 h-3" />
+                                {concern}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <Separator />
+
+                    {/* Fair Trade */}
+                    {result.ethicalRating.fairTrade && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Award className="w-5 h-5 text-blue-600" />
+                            <h4 className="font-semibold">Fair Trade</h4>
+                          </div>
+                          <Badge 
+                            variant={result.ethicalRating.fairTrade.certified ? 'default' : 'secondary'}
+                            className={result.ethicalRating.fairTrade.certified ? 'bg-blue-100 text-blue-800' : ''}
+                          >
+                            {result.ethicalRating.fairTrade.certified ? 'Certified' : 'Not certified'}
+                          </Badge>
+                        </div>
+                        {result.ethicalRating.fairTrade.certification && (
+                          <div className="bg-blue-50 p-3 rounded-lg">
+                            <div className="text-sm font-semibold text-blue-800">
+                              {result.ethicalRating.fairTrade.certification}
+                            </div>
+                          </div>
+                        )}
+                        {result.ethicalRating.fairTrade.details && (
+                          <p className="text-sm text-muted-foreground">
+                            {result.ethicalRating.fairTrade.details}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    <Separator />
+
+                    {/* Labor Practices */}
+                    {result.ethicalRating.laborPractices && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Users className="w-5 h-5 text-purple-600" />
+                            <h4 className="font-semibold">Labor Practices</h4>
+                          </div>
+                          <div className="text-lg font-bold">
+                            {result.ethicalRating.laborPractices.score}/100
+                          </div>
+                        </div>
+                        <Progress value={result.ethicalRating.laborPractices.score} className="h-2" />
+                        {result.ethicalRating.laborPractices.certifications && result.ethicalRating.laborPractices.certifications.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {result.ethicalRating.laborPractices.certifications.map((cert, idx) => (
+                              <Badge key={idx} variant="outline" className="text-xs">
+                                {cert}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                        {result.ethicalRating.laborPractices.concerns && result.ethicalRating.laborPractices.concerns.length > 0 && (
+                          <div className="space-y-1">
+                            {result.ethicalRating.laborPractices.concerns.map((concern, idx) => (
+                              <div key={idx} className="text-sm text-warning flex items-center gap-2">
+                                <AlertTriangle className="w-3 h-3" />
+                                {concern}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <Separator />
+
+                    {/* Animal Testing */}
+                    {result.ethicalRating.animalTesting && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <FlaskConical className="w-5 h-5 text-indigo-600" />
+                            <h4 className="font-semibold">Animal Testing</h4>
+                          </div>
+                          <Badge 
+                            variant={result.ethicalRating.animalTesting.policy === 'not-tested' ? 'default' : 
+                                    result.ethicalRating.animalTesting.policy === 'tested' ? 'destructive' : 'secondary'}
+                            className={result.ethicalRating.animalTesting.policy === 'not-tested' ? 'bg-success text-success-foreground' : ''}
+                          >
+                            {result.ethicalRating.animalTesting.policy === 'not-tested' ? 'Not tested on animals' :
+                             result.ethicalRating.animalTesting.policy === 'tested' ? 'Tested on animals' : 'Policy unclear'}
+                          </Badge>
+                        </div>
+                        {result.ethicalRating.animalTesting.details && (
+                          <p className="text-sm text-muted-foreground">
+                            {result.ethicalRating.animalTesting.details}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Shield className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <p>Ethical rating data not available</p>
+                    <p className="text-sm">This analysis requires AI processing with complete product information</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

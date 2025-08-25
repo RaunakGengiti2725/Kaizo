@@ -27,6 +27,48 @@ export interface AIAnalysisResult {
     allergens?: string[];
     additives?: string[];
   };
+  environmentalImpact?: {
+    carbonFootprint?: {
+      score: number; // 0-100 (higher is better)
+      level: 'low' | 'medium' | 'high';
+      details: string;
+      factors?: string[];
+    };
+    waterUsage?: {
+      score: number; // 0-100 (higher is better) 
+      level: 'low' | 'medium' | 'high';
+      details: string;
+      estimatedLiters?: number;
+    };
+    packaging?: {
+      recyclable: boolean;
+      materials: string[];
+      sustainabilityScore: number; // 0-100
+    };
+  };
+  ethicalRating?: {
+    overallScore: number; // 0-100
+    palmOil?: {
+      present: boolean;
+      sustainable: boolean | 'unclear';
+      certification?: string;
+      concerns?: string[];
+    };
+    fairTrade?: {
+      certified: boolean;
+      certification?: string;
+      details?: string;
+    };
+    laborPractices?: {
+      score: number; // 0-100
+      concerns?: string[];
+      certifications?: string[];
+    };
+    animalTesting?: {
+      policy: 'not-tested' | 'tested' | 'unclear';
+      details?: string;
+    };
+  };
   trustScore: number;
   recommendations: string[];
 }
@@ -243,7 +285,7 @@ Return JSON ONLY in this exact shape:
   }
 
   private buildAnalysisPrompt(extractedText: string): string {
-    return `You are an expert vegan nutritionist and food scientist. Analyze the following product ingredients and provide a comprehensive vegan assessment.
+    return `You are an expert vegan nutritionist, environmental scientist, and ethical consumption specialist. Analyze the following product ingredients and provide a comprehensive assessment covering vegan status, environmental impact, and ethical considerations.
 
 EXTRACTED TEXT FROM PRODUCT:
 "${extractedText}"
@@ -281,11 +323,55 @@ Please provide a detailed analysis in JSON format with the following structure:
     "allergens": ["allergens present"],
     "additives": ["artificial additives"]
   },
+  "environmentalImpact": {
+    "carbonFootprint": {
+      "score": number (0-100, higher is better),
+      "level": "low" | "medium" | "high",
+      "details": "explanation of carbon impact",
+      "factors": ["key factors affecting carbon footprint"]
+    },
+    "waterUsage": {
+      "score": number (0-100, higher is better),
+      "level": "low" | "medium" | "high", 
+      "details": "explanation of water usage",
+      "estimatedLiters": number (estimated liters per serving/unit)
+    },
+    "packaging": {
+      "recyclable": boolean,
+      "materials": ["packaging materials"],
+      "sustainabilityScore": number (0-100)
+    }
+  },
+  "ethicalRating": {
+    "overallScore": number (0-100),
+    "palmOil": {
+      "present": boolean,
+      "sustainable": boolean | "unclear",
+      "certification": "RSPO" | "other certification" | null,
+      "concerns": ["specific concerns about palm oil"]
+    },
+    "fairTrade": {
+      "certified": boolean,
+      "certification": "certification body name",
+      "details": "details about fair trade practices"
+    },
+    "laborPractices": {
+      "score": number (0-100),
+      "concerns": ["labor practice concerns"],
+      "certifications": ["relevant certifications"]
+    },
+    "animalTesting": {
+      "policy": "not-tested" | "tested" | "unclear",
+      "details": "details about animal testing policy"
+    }
+  },
   "trustScore": number (0-100),
   "recommendations": ["actionable recommendations for the user"]
 }
 
 ANALYSIS GUIDELINES:
+
+VEGAN ANALYSIS:
 1. Be extremely thorough and accurate - vegans depend on this information
 2. Consider hidden animal products (like vitamin D3 from sheep wool, L-cysteine from hair/feathers)
 3. Identify processing aids that might not be listed but could be used
@@ -293,11 +379,32 @@ ANALYSIS GUIDELINES:
 5. Provide specific alternatives for non-vegan ingredients
 6. Explain the source and function of each problematic ingredient
 7. Rate confidence based on ingredient clarity and completeness of information
-8. Include trust score based on transparency of labeling and ingredient sourcing
-9. Consider regional differences in ingredient sourcing
-10. Flag ingredients that are sometimes vegan, sometimes not (like sugar, natural flavors)
+8. Consider regional differences in ingredient sourcing
+9. Flag ingredients that are sometimes vegan, sometimes not (like sugar, natural flavors)
 
-Be helpful, educational, and honest about uncertainties. If information is unclear, suggest how the user can get definitive answers.`;
+ENVIRONMENTAL IMPACT ANALYSIS:
+10. Assess carbon footprint based on ingredient types (e.g., tropical oils, imported ingredients, processed foods)
+11. Consider water usage for ingredient production (nuts, tropical fruits, grains vs. processed items)
+12. Evaluate packaging materials and recyclability from visible packaging
+13. Factor in transportation impact for non-local ingredients
+14. Consider processing intensity and energy requirements
+15. Higher scores (80-100) for low-impact local plants, medium scores (40-79) for moderate impact, low scores (0-39) for high-impact ingredients
+
+ETHICAL RATING ANALYSIS:
+16. Check for palm oil and assess if sustainable (RSPO certification or alternatives)
+17. Look for fair trade certifications (Fair Trade, Rainforest Alliance, etc.)
+18. Consider labor practices based on ingredient origins and brand reputation
+19. Assess animal testing policies (especially for additives, vitamins, artificial ingredients)
+20. Evaluate corporate social responsibility indicators
+21. Consider supply chain transparency and traceability
+
+SCORING METHODOLOGY:
+- Environmental scores: Higher is better (100 = excellent environmental impact)
+- Ethical scores: Higher is better (100 = excellent ethical practices)
+- Trust score: Based on transparency, certifications, and information completeness
+- Be conservative with scores when information is limited
+
+Be helpful, educational, and honest about uncertainties. If information is unclear, suggest how the user can get definitive answers. Prioritize consumer education about environmental and ethical impacts alongside vegan status.`;
   }
 
   private parseAIResponse(aiResponse: string, originalText: string): AIAnalysisResult {
