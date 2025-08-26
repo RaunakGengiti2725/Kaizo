@@ -39,14 +39,14 @@ const Index = () => {
             <div className="text-center lg:text-left">
               <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-4 py-2 rounded-full text-sm font-medium mb-6 shadow-lg shadow-emerald-500/10">
                 <Leaf className="w-4 h-4 text-emerald-400" />
-                <span className="text-emerald-400 font-semibold drop-shadow-[0_0_8px_rgba(34,197,94,0.6)]">
+                <span className="text-emerald-400 font-semibold">
                   Plant-Powered Technology
                 </span>
               </div>
               
               <h1 className="text-4xl lg:text-6xl font-bold text-foreground mb-6 leading-tight">
                 Your Smart
-                <span className="text-emerald-400 drop-shadow-[0_0_12px_rgba(34,197,94,0.8)] font-extrabold"> Vegan </span>
+                <span className="text-emerald-400 font-extrabold"> Vegan </span>
                 Companion
               </h1>
               
