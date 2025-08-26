@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { Scan, ChefHat, MapPin, ArrowRight, Leaf } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import heroImage from '@/assets/hero-vegan.jpg';
+import FeaturePreviewHover from '@/components/FeaturePreviewHover';
 
 const Index = () => {
   const features = [
@@ -69,14 +69,7 @@ const Index = () => {
               </div>
             </div>
             
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-primary rounded-3xl blur-3xl opacity-20 transform rotate-6" />
-              <img 
-                src={heroImage} 
-                alt="Fresh vegan ingredients" 
-                className="relative rounded-3xl shadow-card w-full max-w-lg mx-auto"
-              />
-            </div>
+            <FeaturePreviewHover />
           </div>
         </div>
       </section>
@@ -99,11 +92,11 @@ const Index = () => {
               return (
                 <Card 
                   key={index} 
-                  className="shadow-card hover:shadow-glow transition-smooth border-0 bg-gradient-card group cursor-pointer"
+                  className="group cursor-pointer rounded-2xl bg-white/70 dark:bg-gray-900/50 backdrop-blur-sm border border-emerald-100/70 dark:border-emerald-800/50 shadow-lg hover:shadow-2xl hover:border-emerald-300/80 hover:-translate-y-0.5 transition-smooth"
                 >
                   <Link to={feature.href}>
                     <CardHeader className="text-center">
-                      <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-background shadow-soft flex items-center justify-center group-hover:scale-110 transition-smooth">
+                      <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200/70 dark:border-emerald-800/60 shadow-soft flex items-center justify-center group-hover:scale-110 transition-smooth">
                         <Icon className={`w-8 h-8 ${feature.color}`} />
                       </div>
                       <CardTitle className="text-xl mb-2">{feature.title}</CardTitle>

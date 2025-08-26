@@ -13,44 +13,55 @@ import NotFound from "./pages/NotFound";
 import Community from "./pages/Community";
 import Login from "./pages/Login";
 import Onboarding from "./pages/Onboarding";
+import SplashScreen from "./pages/SplashScreen";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider } from "./contexts/AuthContext";
+import { useSplashScreen } from "./hooks/useSplashScreen";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <Layout>
-            <Routes>
-              <Route path="/onboarding" element={<Onboarding />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
-              <Route path="/scan" element={<ProtectedRoute><Scan /></ProtectedRoute>} />
-              <Route
-                path="/recipes"
-                element={
-                  <ProtectedRoute>
-                    <ErrorBoundary>
-                      <Recipes />
-                    </ErrorBoundary>
-                  </ProtectedRoute>
-                }
-              />
-              <Route path="/map" element={<ProtectedRoute><Map /></ProtectedRoute>} />
-              <Route path="/community" element={<ProtectedRoute><Community /></ProtectedRoute>} />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Layout>
-        </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  const { showSplash, hideSplash } = useSplashScreen();
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        
+        {/* Splash Screen */}
+        {showSplash && <SplashScreen onEnter={hideSplash} />}
+        
+        {/* Main App */}
+        <BrowserRouter>
+          <AuthProvider>
+            <Layout>
+              <Routes>
+                <Route path="/onboarding" element={<Onboarding />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+                <Route path="/scan" element={<ProtectedRoute><Scan /></ProtectedRoute>} />
+                <Route
+                  path="/recipes"
+                  element={
+                    <ProtectedRoute>
+                      <ErrorBoundary>
+                        <Recipes />
+                      </ErrorBoundary>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route path="/map" element={<ProtectedRoute><Map /></ProtectedRoute>} />
+                <Route path="/community" element={<ProtectedRoute><Community /></ProtectedRoute>} />
+                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Layout>
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;
