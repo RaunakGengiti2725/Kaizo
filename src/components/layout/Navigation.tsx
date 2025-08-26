@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Scan, ChefHat, MapPin, Menu, X, Users, User, LogOut } from 'lucide-react';
+import KaizoLogo from '@/assets/Kaizo.png';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -27,9 +28,11 @@ const Navigation = () => {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-primary rounded-lg flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">K</span>
-            </div>
+            <img 
+              src={KaizoLogo} 
+              alt="Kaizo Logo" 
+              className="w-16 h-16 object-contain"
+            />
             <span className="font-semibold text-lg text-foreground">Kaizo</span>
           </Link>
 
