@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
+import { AnimatedText } from '@/components/ui/animated-text';
 
 const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -33,7 +34,11 @@ const Navigation = () => {
               alt="Kaizo Logo" 
               className="w-16 h-16 object-contain"
             />
-            <span className="font-semibold text-lg text-foreground">Kaizo</span>
+            <AnimatedText 
+              text="Kaizo" 
+              className="font-semibold text-lg text-foreground"
+              delay={100}
+            />
           </Link>
 
           {/* Desktop Navigation */}
