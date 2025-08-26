@@ -37,14 +37,16 @@ const Index = () => {
         <div className="relative container mx-auto px-4 py-16 lg:py-24">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div className="text-center lg:text-left">
-              <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-2 rounded-full text-sm font-medium mb-6">
-                <Leaf className="w-4 h-4" />
-                Plant-Powered Technology
+              <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-4 py-2 rounded-full text-sm font-medium mb-6 shadow-lg shadow-emerald-500/10">
+                <Leaf className="w-4 h-4 text-emerald-400" />
+                <span className="text-emerald-400 font-semibold drop-shadow-[0_0_8px_rgba(34,197,94,0.6)]">
+                  Plant-Powered Technology
+                </span>
               </div>
               
               <h1 className="text-4xl lg:text-6xl font-bold text-foreground mb-6 leading-tight">
                 Your Smart
-                <span className="text-transparent bg-gradient-primary bg-clip-text"> Vegan </span>
+                <span className="text-emerald-400 drop-shadow-[0_0_12px_rgba(34,197,94,0.8)] font-extrabold"> Vegan </span>
                 Companion
               </h1>
               
