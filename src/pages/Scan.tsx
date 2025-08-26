@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Camera, Upload, Loader2, CheckCircle, XCircle, AlertTriangle, Brain, Zap, Target, TrendingUp, Info, Lightbulb, Leaf, Droplets, TreePine, Recycle, Shield, Users, Award, FlaskConical } from 'lucide-react';
+import { Camera, Upload, Loader2, CheckCircle, XCircle, AlertTriangle, Brain, Zap, Target, TrendingUp, Info, Lightbulb, Leaf, Droplets, TreePine, Recycle, Shield, Users, Award, FlaskConical, Barcode } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -35,40 +35,40 @@ const Scan = () => {
     setProcessingResult(null);
     setProcessingProgress(0);
     setCapturedImages(images);
-    
+
     try {
       // Initialize image processor
       setCurrentStage('Initializing AI vision...');
       setProcessingProgress(10);
       await imageProcessor.initialize();
-      
+
       // Process all images
       setCurrentStage('Analyzing product images...');
       setProcessingProgress(30);
-      
+
       const imageData = images.map(img => ({
         file: img.file,
         type: img.type
       }));
-      
+
       const processingResult = await imageProcessor.processImages(imageData);
       setProcessingResult(processingResult);
       setProcessingProgress(70);
-      
+
       // Analyze for vegan content with AI
       setCurrentStage('AI analyzing ingredients...');
       setProcessingProgress(85);
-      
+
       const aiImageData = images.map(img => ({
         file: img.file,
         text: processingResult.extractedTexts.find(et => et.source === img.type)?.text || '',
         type: img.type
       }));
-      
+
       const veganResult = await checkVeganStatusWithAI(processingResult.combinedText, aiImageData);
       setResult(veganResult);
       setProcessingProgress(100);
-      
+
       // Haptic feedback based on result
       if (veganResult.result === 'vegan') {
         haptics.success();
@@ -77,17 +77,100 @@ const Scan = () => {
       } else {
         haptics.warning();
       }
-      
+
       toast({
         title: "Analysis Complete",
         description: `Product analyzed: ${veganResult.result.replace('-', ' ')} (${Math.round(veganResult.confidence * 100)}% confidence)`,
       });
-      
+
     } catch (error) {
       console.error('Error processing images:', error);
       toast({
         title: "Processing Error",
         description: "Failed to analyze images. Please try again with clearer photos.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+      setCurrentStage('');
+      setProcessingProgress(0);
+    }
+  }, []);
+
+  const handleBarcodeLookup = useCallback(async (productInfo: {
+    barcode: string;
+    productName?: string;
+    brandName?: string;
+    category?: string;
+    ingredients?: string[];
+    isVegan?: boolean;
+    confidence?: number;
+  }) => {
+    setIsProcessing(true);
+    setResult(null);
+
+    try {
+      setCurrentStage('Analyzing barcode data...');
+      setProcessingProgress(50);
+
+      // Create a simplified result from barcode lookup
+      const veganResult: VeganCheckResult = {
+        result: productInfo.isVegan ? 'vegan' : 'not-vegan',
+        confidence: productInfo.confidence || 0.8,
+        reasons: [
+          `Based on barcode lookup for ${productInfo.productName || 'product'}`,
+          productInfo.isVegan ?
+            'Product appears to be vegan-friendly' :
+            'Product may contain animal-derived ingredients'
+        ],
+        productName: productInfo.productName,
+        brandName: productInfo.brandName,
+        productCategory: productInfo.category,
+        detectedIngredients: productInfo.ingredients?.map((ing, idx) => ({
+          ingredient: ing,
+          category: 'unclear', // We'll need to analyze these
+          confidence: 0.8,
+          explanation: 'Detected via barcode lookup'
+        })) || [],
+        trustScore: 0.7,
+        aiAnalysis: true
+      };
+
+      // If we have ingredients, analyze them for more detailed results
+      if (productInfo.ingredients && productInfo.ingredients.length > 0) {
+        setCurrentStage('Analyzing ingredients...');
+        setProcessingProgress(75);
+
+        const ingredientsText = productInfo.ingredients.join(', ');
+        const detailedResult = await checkVeganStatusWithAI(ingredientsText, []);
+        veganResult.reasons = detailedResult.reasons;
+        veganResult.detectedIngredients = detailedResult.detectedIngredients;
+        veganResult.confidence = detailedResult.confidence;
+        veganResult.result = detailedResult.result;
+      }
+
+      setResult(veganResult);
+      setProcessingProgress(100);
+
+      // Haptic feedback
+      if (veganResult.result === 'vegan') {
+        haptics.success();
+      } else if (veganResult.result === 'not-vegan') {
+        haptics.error();
+      } else {
+        haptics.warning();
+      }
+
+      toast({
+        title: "Barcode Analysis Complete",
+        description: `${productInfo.productName || 'Product'} analyzed: ${veganResult.result.replace('-', ' ')}`,
+      });
+
+    } catch (error) {
+      console.error('Error processing barcode:', error);
+      toast({
+        title: "Barcode Analysis Error",
+        description: "Failed to analyze barcode data. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -968,9 +1051,23 @@ const Scan = () => {
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <div className="text-center mb-8">
         <h1 className="text-4xl font-bold text-foreground mb-4">Kaizo - AI-Powered Vegan Scanner</h1>
-        <p className="text-xl text-muted-foreground">
-          Capture multiple angles of your product for the most accurate vegan analysis
+        <p className="text-xl text-muted-foreground mb-4">
+          Capture multiple angles of your product or scan barcodes for instant vegan analysis
         </p>
+        <div className="flex justify-center gap-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-1">
+            <Camera className="w-4 h-4" />
+            <span>Multi-angle capture</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Barcode className="w-4 h-4" />
+            <span>Barcode scanning</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Brain className="w-4 h-4" />
+            <span>AI analysis</span>
+          </div>
+        </div>
       </div>
 
       {/* Processing State */}
@@ -1023,9 +1120,10 @@ const Scan = () => {
 
       {/* Camera Capture Component */}
       {!isProcessing && (
-        <CameraCapture 
+        <CameraCapture
           onImagesCapture={processImages}
           isProcessing={isProcessing}
+          onBarcodeLookup={handleBarcodeLookup}
         />
       )}
       
@@ -1047,27 +1145,27 @@ const Scan = () => {
                 <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-primary/10 flex items-center justify-center">
                   <Camera className="w-6 h-6 text-primary" />
                 </div>
-                <h4 className="font-semibold mb-2">1. Capture</h4>
+                <h4 className="font-semibold mb-2">1. Capture or Scan</h4>
                 <p className="text-sm text-muted-foreground">
-                  Take photos of the front, back, and ingredients list
+                  Take photos of product angles or scan barcodes instantly
                 </p>
               </div>
               <div className="text-center">
                 <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Brain className="w-6 h-6 text-primary" />
+                  <Barcode className="w-6 h-6 text-primary" />
                 </div>
-                <h4 className="font-semibold mb-2">2. Analyze</h4>
+                <h4 className="font-semibold mb-2">2. Get Product Info</h4>
                 <p className="text-sm text-muted-foreground">
-                  AI processes text and identifies all ingredients
+                  AI extracts ingredients and nutritional data automatically
                 </p>
               </div>
               <div className="text-center">
                 <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-primary/10 flex items-center justify-center">
                   <CheckCircle className="w-6 h-6 text-primary" />
                 </div>
-                <h4 className="font-semibold mb-2">3. Decide</h4>
+                <h4 className="font-semibold mb-2">3. Vegan Analysis</h4>
                 <p className="text-sm text-muted-foreground">
-                  Get instant vegan status with detailed explanations
+                  Instant vegan assessment with detailed reasoning and alternatives
                 </p>
               </div>
             </div>

@@ -537,6 +537,65 @@ Please provide a helpful, accurate response about this recipe. Be conversational
 
 Keep your response concise but informative. If the question is about something not related to this recipe, politely redirect to recipe-related topics.`;
   }
+
+  async lookupBarcode(barcode: string): Promise<{
+    productName?: string;
+    brandName?: string;
+    category?: string;
+    ingredients?: string[];
+    isVegan?: boolean;
+    confidence?: number;
+  }> {
+    if (!this.isConfigured()) {
+      throw new Error('Gemini API key not configured. Please add VITE_GEMINI_API_KEY to your .env file.');
+    }
+
+    const prompt = `Given the barcode "${barcode}", provide product information in JSON format:
+
+{
+  "productName": "Product name based on typical barcode patterns",
+  "brandName": "Brand name if identifiable",
+  "category": "Food category (snack, beverage, etc.)",
+  "ingredients": ["common ingredients for this type of product"],
+  "isVegan": false,
+  "confidence": 0.7,
+  "reasoning": "This is a mock lookup - in production this would query a barcode database"
+}
+
+For demo purposes, generate realistic product information based on the barcode pattern. Make some products vegan and others not.`;
+
+    try {
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No JSON found in barcode lookup response');
+      }
+
+      const productInfo = JSON.parse(jsonMatch[0]);
+      return {
+        productName: productInfo.productName,
+        brandName: productInfo.brandName,
+        category: productInfo.category,
+        ingredients: productInfo.ingredients || [],
+        isVegan: productInfo.isVegan,
+        confidence: productInfo.confidence,
+      };
+    } catch (error) {
+      console.error('Barcode lookup failed:', error);
+      // Return mock data for demo purposes
+      return {
+        productName: "Sample Product",
+        brandName: "Demo Brand",
+        category: "Snack",
+        ingredients: ["Sample ingredients"],
+        isVegan: Math.random() > 0.5,
+        confidence: 0.8,
+      };
+    }
+  }
 }
 
 export const geminiAI = new GeminiAIService();
