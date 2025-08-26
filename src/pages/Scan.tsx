@@ -12,6 +12,7 @@ import { imageProcessor, ImageProcessingResult } from '@/utils/imageProcessor';
 import { haptics } from '@/utils/haptics';
 import CameraCapture from '@/components/CameraCapture';
 import scanFeatureImage from '@/assets/scan-feature.jpg';
+import { cn } from '@/lib/utils';
 
 interface CapturedImage {
   id: string;
@@ -22,6 +23,7 @@ interface CapturedImage {
 }
 
 const Scan = () => {
+  const [isLoaded, setIsLoaded] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<VeganCheckResult | null>(null);
   const [processingResult, setProcessingResult] = useState<ImageProcessingResult | null>(null);
@@ -97,6 +99,10 @@ const Scan = () => {
     }
   }, []);
 
+  useEffect(() => {
+    setIsLoaded(true);
+  }, []);
+
   const resetScan = useCallback(() => {
     setResult(null);
     setProcessingResult(null);
@@ -148,7 +154,10 @@ const Scan = () => {
 
   if (result && processingResult) {
     return (
-      <div className="container mx-auto px-4 py-8 max-w-6xl">
+      <div className={cn(
+        "container mx-auto px-4 py-8 max-w-6xl transition-transform duration-200 ease-out",
+        isLoaded ? "animate-slide-in-right" : "translate-x-full"
+      )}>
         {/* Header with result */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-4">
@@ -965,7 +974,10 @@ const Scan = () => {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
+    <div className={cn(
+      "container mx-auto px-4 py-8 max-w-4xl transition-transform duration-200 ease-out",
+      isLoaded ? "animate-slide-in-right" : "translate-x-full"
+    )}>
       <div className="text-center mb-8">
         <h1 className="text-4xl font-bold text-foreground mb-4">Kaizo - AI-Powered Vegan Scanner</h1>
         <p className="text-xl text-muted-foreground">
