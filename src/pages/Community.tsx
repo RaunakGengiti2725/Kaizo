@@ -397,7 +397,12 @@ const Community = () => {
               <Badge
                 key={tag}
                 onClick={() => setFilterTag(tag)}
-                className={cn('cursor-pointer capitalize', filterTag === tag ? 'bg-primary text-primary-foreground' : 'bg-accent')}
+                className={cn(
+                  'cursor-pointer capitalize transition-colors',
+                  filterTag === tag 
+                    ? 'bg-primary text-primary-foreground shadow-sm' 
+                    : 'bg-muted text-foreground hover:bg-muted/80 border border-border'
+                )}
               >
                 {tag}
               </Badge>

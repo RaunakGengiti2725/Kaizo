@@ -7,6 +7,7 @@ import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import CameraCapture from '@/components/CameraCapture';
+
 import { lookupProductByBarcode } from '@/services/productLookup';
 import { imageProcessor, ImageProcessingResult } from '@/utils/imageProcessor';
 import { checkVeganStatusWithAI, VeganCheckResult } from '@/utils/veganChecker';
@@ -27,6 +28,7 @@ function classifyDiet(result: VeganCheckResult): DietClass {
   if (result.result === 'vegan') return 'vegan';
   if (result.result === 'unclear') return 'unclear';
 
+
   const nonVegan = (result.detectedIngredients || []).filter(d => d.category === 'notVegan');
   if (nonVegan.length === 0) return 'unclear';
 
@@ -42,6 +44,7 @@ function classifyDiet(result: VeganCheckResult): DietClass {
 }
 
 const Scan = () => {
+
   const [activeTab, setActiveTab] = useState<'barcode' | 'photos'>('barcode');
   const [loading, setLoading] = useState(false);
   const [barcode, setBarcode] = useState<string | null>(null);
@@ -50,6 +53,7 @@ const Scan = () => {
   const [productImage, setProductImage] = useState<string | undefined>();
   const [veganResult, setVeganResult] = useState<VeganCheckResult | null>(null);
   const [dietClass, setDietClass] = useState<DietClass>('unclear');
+
   const [processingResult, setProcessingResult] = useState<ImageProcessingResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showResultDialog, setShowResultDialog] = useState(false);
@@ -94,6 +98,7 @@ const Scan = () => {
       const result = await checkVeganStatusWithAI(info.ingredientsText);
       setVeganResult(result);
       setDietClass(classifyDiet(result));
+
 
       console.log('Scan: Analysis complete:', result.result);
       setShowResultDialog(true);
@@ -348,6 +353,7 @@ const Scan = () => {
                       <div className="p-3 rounded border bg-muted/10">
                         <div className="text-sm font-medium mb-1">Protein Sources</div>
                         <div className="text-xs text-muted-foreground">{veganResult.nutritionalInsights?.proteinSources?.join(', ')}</div>
+
       </div>
                     ) : null}
                     {veganResult.nutritionalInsights?.allergens?.length ? (
