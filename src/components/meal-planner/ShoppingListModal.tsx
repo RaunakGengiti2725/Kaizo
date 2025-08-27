@@ -765,7 +765,7 @@ Make it practical, budget-friendly, and optimized for a vegan household.`;
                           </Button>
                           <Button
                             onClick={() => {
-                              const txtContent = `SHOPPING LIST\n`;
+                              let txtContent = `SHOPPING LIST\n`;
                               txtContent += `${weekStart.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })} - ${new Date(weekStart.getTime() + 6 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}\n`;
                               txtContent += `Generated on: ${new Date().toLocaleDateString()}\n\n`;
                               txtContent += `AI Enhanced Shopping List\n`;
@@ -800,7 +800,7 @@ Make it practical, budget-friendly, and optimized for a vegan household.`;
                           </Button>
                           <Button
                             onClick={() => {
-                              const htmlContent = `
+                              let htmlContent = `
                                 <!DOCTYPE html>
                                 <html>
                                 <head>
