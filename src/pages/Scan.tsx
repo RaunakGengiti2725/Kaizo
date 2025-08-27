@@ -162,16 +162,8 @@ const Scan = () => {
             <Card className="border-primary/20">
               <CardContent className="py-8">
                 <div className="text-center space-y-4">
-                  <div className="relative">
-                    <div className="w-16 h-16 mx-auto">
-                      <div className="absolute inset-0 rounded-full border-4 border-primary/20"></div>
-                      <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
-                      <div className="absolute inset-4 rounded-full bg-primary/10 flex items-center justify-center">
-                        <div className="w-6 h-6 bg-primary rounded-full animate-pulse" />
-                        </div>
-                    </div>
-                  </div>
-                    <div className="space-y-2">
+                  <div className="w-12 h-12 mx-auto border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+                  <div className="space-y-2">
                     <h3 className="text-lg font-semibold">Analyzing Product</h3>
                     <p className="text-sm text-muted-foreground">
                       {barcode ? `Barcode: ${barcode}` : 'Processing...'}
