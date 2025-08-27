@@ -49,6 +49,12 @@ export interface VeganCheckResult {
       sustainabilityScore: number;
     };
   };
+  /** AI-estimated carbon footprint summary (0-100, higher is better) */
+  carbonFootprint?: {
+    score: number;
+    grade: 'A' | 'B' | 'C' | 'D' | 'E';
+    reasons: string[];
+  };
   ethicalRating?: {
     overallScore: number;
     palmOil?: {
@@ -119,6 +125,35 @@ export const checkVeganStatusWithAI = async (text: string, images?: Array<{ file
       }))
     ];
 
+    // Compute carbon footprint score/grade from AI data when available
+    const cfReasons: string[] = [];
+    let cfScore: number | undefined = undefined;
+    if (aiAnalysis.environmentalImpact?.carbonFootprint) {
+      // AI returns score 0-100 where higher is better in our prompt
+      cfScore = Math.max(0, Math.min(100, aiAnalysis.environmentalImpact.carbonFootprint.score ?? 50));
+      const details = aiAnalysis.environmentalImpact.carbonFootprint.details;
+      const factors = aiAnalysis.environmentalImpact.carbonFootprint.factors || [];
+      if (details) cfReasons.push(details);
+      if (factors.length > 0) cfReasons.push(...factors.map(f => `Factor: ${f}`));
+    } else {
+      // Lightweight heuristic fallback based on ingredients text
+      const t = text.toLowerCase();
+      cfScore = 70;
+      if (t.includes('palm oil')) { cfScore -= 20; cfReasons.push('Contains palm oil (high deforestation risk)'); }
+      if (t.includes('coconut oil')) { cfScore -= 5; cfReasons.push('Contains coconut oil (tropical import)'); }
+      if (t.includes('chocolate') || t.includes('cocoa')) { cfScore -= 10; cfReasons.push('Contains cocoa (often high footprint)'); }
+      if (t.includes('processed') || t.includes('artificial')) { cfScore -= 5; cfReasons.push('Highly processed ingredients'); }
+      cfScore = Math.max(0, Math.min(100, cfScore));
+    }
+
+    const computeGrade = (score: number): 'A' | 'B' | 'C' | 'D' | 'E' => {
+      if (score >= 90) return 'A';
+      if (score >= 75) return 'B';
+      if (score >= 60) return 'C';
+      if (score >= 40) return 'D';
+      return 'E';
+    };
+
     return {
       result: aiAnalysis.isVegan,
       confidence: aiAnalysis.confidence,
@@ -134,6 +169,7 @@ export const checkVeganStatusWithAI = async (text: string, images?: Array<{ file
       certifications: aiAnalysis.productInfo.certifications,
       nutritionalInsights: aiAnalysis.nutritionalInsights,
       environmentalImpact: aiAnalysis.environmentalImpact,
+      carbonFootprint: cfScore !== undefined ? { score: Math.round(cfScore), grade: computeGrade(cfScore), reasons: cfReasons.slice(0, 6) } : undefined,
       ethicalRating: aiAnalysis.ethicalRating,
       veganScore: Math.round(aiAnalysis.confidence * 100),
       overallScore: Math.max(0, Math.min(100, Math.round((aiAnalysis.trustScore || aiAnalysis.confidence) * 100))),
@@ -264,7 +300,18 @@ export const checkVeganStatusFallback = (text: string): VeganCheckResult => {
     brandName: productInfo.brand,
     productName: productInfo.name,
     suggestions,
-    trustScore: confidence * 0.7 // Lower trust score for pattern matching
+    trustScore: confidence * 0.7, // Lower trust score for pattern matching
+    carbonFootprint: (() => {
+      // Very rough heuristic: fewer processed/additives -> better
+      let score = 70;
+      const reasonsCF: string[] = [];
+      if (cleanText.includes('palm oil')) { score -= 20; reasonsCF.push('Contains palm oil'); }
+      if (cleanText.includes('coconut oil')) { score -= 5; reasonsCF.push('Contains coconut oil'); }
+      if (cleanText.includes('artificial') || cleanText.includes('additive')) { score -= 5; reasonsCF.push('Artificial additives'); }
+      if (foundVegan.length > 5) { score += 5; reasonsCF.push('Many plant-based ingredients'); }
+      const grade = (score >= 90 ? 'A' : score >= 75 ? 'B' : score >= 60 ? 'C' : score >= 40 ? 'D' : 'E') as 'A'|'B'|'C'|'D'|'E';
+      return { score: Math.round(Math.max(0, Math.min(100, score))), grade, reasons: reasonsCF };
+    })()
   };
 };
 

@@ -37,7 +37,7 @@ const Recipes = () => {
     setCandidates([]);
     setLoading(true);
     try {
-      const res = await geminiAI.generateRecipes({ mealType, proteinSource, cuisineOrFlavor, timeMinutes }, user?.id);
+      const res = await geminiAI.generateRecipes({ mealType, proteinSource, cuisineOrFlavor, timeMinutes });
       setCandidates(res);
     } catch (e: any) {
       setError(e?.message || 'Failed to generate recipes');
@@ -50,7 +50,7 @@ const Recipes = () => {
     setLoading(true);
     setError(null);
     try {
-      const detail = await geminiAI.expandRecipe(c, user?.id);
+      const detail = await geminiAI.expandRecipe(c);
       setSelected(detail);
     } catch (e: any) {
       setError(e?.message || 'Failed to load recipe');

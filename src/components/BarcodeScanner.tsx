@@ -1,18 +1,20 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { BrowserMultiFormatReader, NotFoundException } from '@zxing/library';
+import { BrowserMultiFormatReader } from '@zxing/browser';
+import { NotFoundException } from '@zxing/library';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface BarcodeScannerProps {
   onDetected: (code: string) => void;
   className?: string;
+  autoStart?: boolean;
 }
 
 /**
  * Camera-based barcode scanner using ZXing. Provides start/stop controls and
  * emits the detected code via onDetected.
  */
-const BarcodeScanner = ({ onDetected, className }: BarcodeScannerProps) => {
+const BarcodeScanner = ({ onDetected, className, autoStart = false }: BarcodeScannerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
   const [isActive, setIsActive] = useState(false);
@@ -27,6 +29,7 @@ const BarcodeScanner = ({ onDetected, className }: BarcodeScannerProps) => {
   const activeRef = useRef(false); // Use ref to avoid async state update issues
   const mediaStreamRef = useRef<MediaStream | null>(null); // Persist current camera stream
   const decodingRef = useRef(false); // Prevent overlapping decode calls
+  const canvasRef = useRef<HTMLCanvasElement | null>(null); // Offscreen canvas for frame grabs
 
   // Wait until the video element has real dimensions and enough data
   const waitForVideoReady = useCallback((video: HTMLVideoElement, timeoutMs = 2500) => {
@@ -179,8 +182,22 @@ const BarcodeScanner = ({ onDetected, className }: BarcodeScannerProps) => {
     });
 
     try {
-      // Use decodeFromVideoElement with timeout to prevent hanging
-      const decodePromise = codeReaderRef.current.decodeFromVideoElement(video);
+      // Grab a frame to an offscreen canvas and decode from it to avoid
+      // any interference with the playing <video> element.
+      if (!canvasRef.current) {
+        canvasRef.current = document.createElement('canvas');
+      }
+      const canvas = canvasRef.current;
+      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+      }
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas 2D context unavailable');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      // Use ZXing to decode from the canvas without altering the video
+      const decodePromise = codeReaderRef.current!.decodeFromCanvas(canvas);
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('Scan timeout')), 1500)
       );
@@ -318,6 +335,15 @@ const BarcodeScanner = ({ onDetected, className }: BarcodeScannerProps) => {
     }
   }, [scanOnce, stop]);
 
+  // Auto-start on mount if enabled
+  useEffect(() => {
+    if (autoStart) {
+      // Fire and forget; UI will keep the start button as fallback
+      start();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Cleanup effect - only run on actual unmount
   useEffect(() => {
     return () => {
@@ -350,8 +376,7 @@ const BarcodeScanner = ({ onDetected, className }: BarcodeScannerProps) => {
                   <div className="absolute -bottom-1 -left-1 h-8 w-8 border-b-4 border-l-4 border-white rounded-bl-lg opacity-80" />
                   <div className="absolute -bottom-1 -right-1 h-8 w-8 border-b-4 border-r-4 border-white rounded-br-lg opacity-80" />
 
-                  {/* Animated scanning line */}
-                  <div className="absolute left-2 right-2 top-1/2 -translate-y-1/2 h-1 bg-red-500 rounded-full shadow-lg animate-pulse opacity-90" />
+                  {/* Red scanning line removed per request */}
                 </div>
               </div>
 
@@ -379,14 +404,7 @@ const BarcodeScanner = ({ onDetected, className }: BarcodeScannerProps) => {
                 </Button>
               </div>
 
-              {/* Scan attempts counter */}
-              {scanAttempts > 0 && (
-                <div className="absolute top-16 left-4 z-20">
-                  <div className="px-2 py-1 rounded bg-black/60 text-white text-xs">
-                    Scans: {scanAttempts}
-                  </div>
-                </div>
-              )}
+              {/* Scan counter removed per UX feedback */}
             </>
           )}
 
