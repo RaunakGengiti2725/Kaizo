@@ -10,8 +10,8 @@ import { cn } from '@/lib/utils';
 
 const Index = () => {
   const { isSliding, slideToPage } = useSlideTransition();
-  const { ref: featuresRef, isVisible: featuresVisible } = useScrollAnimation(0.2);
-  const { ref: ctaRef, isVisible: ctaVisible } = useScrollAnimation(0.3);
+  const { ref: featuresRef, isVisible: featuresVisible, hasAnimated: featuresAnimated } = useScrollAnimation(0.1);
+  const { ref: ctaRef, isVisible: ctaVisible, hasAnimated: ctaAnimated } = useScrollAnimation(0.1);
   const [hasScrolled, setHasScrolled] = useState(false);
 
   useEffect(() => {
@@ -123,7 +123,7 @@ const Index = () => {
         <div className="container mx-auto px-4">
           <div className={cn(
             "text-center mb-16 transition-all duration-1000 ease-out pt-64",
-            featuresVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-12"
+            featuresAnimated ? "opacity-100 translate-y-0" : "opacity-0 translate-y-12"
           )}>
             <h2 className="text-3xl lg:text-4xl font-bold text-foreground mb-4">
               Everything You Need for Vegan Living
@@ -135,7 +135,7 @@ const Index = () => {
           
           <div className={cn(
             "grid grid-cols-1 md:grid-cols-3 gap-8 transition-all duration-1000 ease-out",
-            featuresVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-12"
+            featuresAnimated ? "opacity-100 translate-y-0" : "opacity-0 translate-y-12"
           )}>
             {features.map((feature, index) => {
               const Icon = feature.icon;
@@ -144,10 +144,10 @@ const Index = () => {
                   key={index} 
                   className={cn(
                     "group cursor-pointer rounded-2xl bg-white/70 dark:bg-gray-900/50 backdrop-blur-sm border border-emerald-100/70 dark:border-emerald-800/50 shadow-lg hover:shadow-2xl hover:border-emerald-300/80 hover:-translate-y-0.5 transition-all duration-1000 ease-out",
-                    featuresVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-12"
+                    featuresAnimated ? "opacity-100 translate-y-0" : "opacity-0 translate-y-12"
                   )}
                   style={{
-                    transitionDelay: featuresVisible ? `${index * 300}ms` : '0ms'
+                    transitionDelay: featuresAnimated ? `${index * 300}ms` : '0ms'
                   }}
                 >
                   <Link to={feature.href}>
@@ -218,14 +218,14 @@ const Index = () => {
             </h2>
             <p className={cn(
               "text-xl text-muted-foreground mb-8 transition-all duration-700 ease-out",
-              ctaVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
+              ctaAnimated ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
             )}>
               Join thousands of people making informed plant-based choices every day
             </p>
             <div className={cn(
               "transition-all duration-700 ease-out",
-              ctaVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
-            )} style={{ transitionDelay: ctaVisible ? '600ms' : '0ms' }}>
+              ctaAnimated ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
+            )} style={{ transitionDelay: ctaAnimated ? '600ms' : '0ms' }}>
               <Button 
                 size="lg" 
                 className="bg-primary hover:bg-primary/90 shadow-glow transition-smooth"

@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import Scan from "./pages/Scan";
 import Recipes from "./pages/Recipes";
 import Map from "./pages/Map";
+import MealPlanner from "./pages/MealPlanner";
 import NotFound from "./pages/NotFound";
 import Community from "./pages/Community";
 import Login from "./pages/Login";
@@ -52,6 +53,7 @@ const App = () => {
                   }
                 />
                 <Route path="/map" element={<ProtectedRoute><Map /></ProtectedRoute>} />
+                <Route path="/meal-planner" element={<ProtectedRoute><MealPlanner /></ProtectedRoute>} />
                 <Route path="/community" element={<ProtectedRoute><Community /></ProtectedRoute>} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
