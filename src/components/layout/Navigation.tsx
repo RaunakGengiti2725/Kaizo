@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Scan, ChefHat, MapPin, Menu, X, Users, User, LogOut } from 'lucide-react';
+import { Scan, ChefHat, MapPin, Menu, X, Users, User, LogOut, Calendar } from 'lucide-react';
 import KaizoLogo from '@/assets/Kaizo.png';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -18,6 +18,7 @@ const Navigation = () => {
     { href: '/scan', label: 'Scan', icon: Scan },
     { href: '/recipes', label: 'Recipes', icon: ChefHat },
     { href: '/map', label: 'Restaurants', icon: MapPin },
+    { href: '/meal-planner', label: 'Meal Planner', icon: Calendar },
     { href: '/community', label: 'Community', icon: Users },
   ];
 
