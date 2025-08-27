@@ -882,7 +882,114 @@ export const ShoppingListModal: React.FC<ShoppingListModalProps> = ({
                             onClick={() => downloadAsTXT(shoppingList)}
                             variant="outline"
                             size="sm"
-                            className="gap-2"
+                            className="gap-1"
+                            title="Download AI Enhanced List as CSV"
+                          >
+                            <Download className="w-3 h-3" />
+                            CSV
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              let txtContent = `SHOPPING LIST\n`;
+                              txtContent += `${weekStart.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })} - ${new Date(weekStart.getTime() + 6 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}\n`;
+                              txtContent += `Generated on: ${new Date().toLocaleDateString()}\n\n`;
+                              txtContent += `AI Enhanced Shopping List\n`;
+                              txtContent += `${'='.repeat(15)}\n`;
+                              aiGeneratedList.forEach(item => {
+                                txtContent += `☐ ${item.name} - ${item.quantity} ${item.unit}\n`;
+                                if (item.recipes.length > 0) {
+                                  txtContent += `   Used in: ${item.recipes.join(', ')}\n`;
+                                }
+                                if (item.notes) {
+                                  txtContent += `   Note: ${item.notes}\n`;
+                                }
+                                txtContent += '\n';
+                              });
+                              const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8' });
+                              const link = document.createElement('a');
+                              const url = URL.createObjectURL(blob);
+                              link.setAttribute('href', url);
+                              link.setAttribute('download', `ai-enhanced-shopping-list-${weekStart.toISOString().split('T')[0]}.txt`);
+                              link.style.visibility = 'hidden';
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                            }}
+                            variant="outline"
+                            size="sm"
+                            className="gap-1"
+                            title="Download AI Enhanced List as TXT"
+                          >
+                            <Download className="w-3 h-3" />
+                            TXT
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              let htmlContent = `
+                                <!DOCTYPE html>
+                                <html>
+                                <head>
+                                  <title>Shopping List</title>
+                                  <style>
+                                    body { font-family: Arial, sans-serif; margin: 20px; }
+                                    .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+                                    .category { margin-bottom: 25px; }
+                                    .category-title { font-size: 18px; font-weight: bold; margin-bottom: 15px; color: #333; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+                                    .item { margin-bottom: 10px; padding-left: 20px; }
+                                    .item-name { font-weight: bold; }
+                                    .item-details { color: #666; font-size: 14px; margin-left: 20px; }
+                                    .checkbox { display: inline-block; width: 20px; height: 20px; border: 2px solid #333; margin-right: 10px; }
+                                    @media print { .no-print { display: none; } }
+                                  </style>
+                                </head>
+                                <body>
+                                  <div class="header">
+                                    <h1>SHOPPING LIST</h1>
+                                    <p>${weekStart.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })} - ${new Date(weekStart.getTime() + 6 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+                                    <p>Generated on: ${new Date().toLocaleDateString()}</p>
+                                  </div>
+                              `;
+                              htmlContent += `
+                                <div class="category">
+                                  <div class="category-title">AI Enhanced Shopping List</div>
+                              `;
+                              aiGeneratedList.forEach(item => {
+                                htmlContent += `
+                                  <div class="item">
+                                    <span class="checkbox"></span>
+                                    <span class="item-name">${item.name}</span> - ${item.quantity} ${item.unit}
+                                    <div class="item-details">
+                                      Used in: ${item.recipes.join(', ')}
+                                      ${item.notes ? ` | Note: ${item.notes}` : ''}
+                                    </div>
+                                  </div>
+                                `;
+                              });
+                              htmlContent += `
+                                </div>
+                              `;
+                              htmlContent += `
+                                <div class="no-print" style="margin-top: 30px; text-align: center;">
+                                  <p>Print this page to save as PDF or take with you shopping!</p>
+                                </div>
+                              </body>
+                              </html>
+                            `;
+                              const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+                              const url = URL.createObjectURL(blob);
+                              const link = document.createElement('a');
+                              link.setAttribute('href', url);
+                              link.setAttribute('download', `ai-enhanced-shopping-list-${weekStart.toISOString().split('T')[0]}.html`);
+                              link.style.visibility = 'hidden';
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                            }}
+                            variant="outline"
+                            size="sm"
+                            className="gap-1"
+                            title="Download AI Enhanced List as HTML"
+
                           >
                             <Download className="w-4 h-4" />
                             Download Basic List

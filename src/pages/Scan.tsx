@@ -51,12 +51,53 @@ const Scan = () => {
   const [productName, setProductName] = useState<string | undefined>();
   const [brandName, setBrandName] = useState<string | undefined>();
   const [productImage, setProductImage] = useState<string | undefined>();
+  const [ecoScore, setEcoScore] = useState<{ score?: number; grade?: string; carbonFootprint_100g?: number } | undefined>();
   const [veganResult, setVeganResult] = useState<VeganCheckResult | null>(null);
   const [dietClass, setDietClass] = useState<DietClass>('unclear');
 
   const [processingResult, setProcessingResult] = useState<ImageProcessingResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showResultDialog, setShowResultDialog] = useState(false);
+
+  const combinedEco = useMemo(() => {
+    // Base from OFF eco-score if present
+    let base = typeof ecoScore?.score === 'number' ? ecoScore.score : undefined;
+    // Optional AI carbon estimate (0-100, higher is better)
+    const aiCarbon = typeof veganResult?.carbonFootprint?.score === 'number' ? veganResult!.carbonFootprint!.score : undefined;
+    // Optional OFF carbon footprint (g CO2e / 100g). Lower is better.
+    const cf = typeof ecoScore?.carbonFootprint_100g === 'number' ? ecoScore!.carbonFootprint_100g : undefined;
+
+    if (base === undefined && aiCarbon !== undefined) base = aiCarbon;
+    if (base === undefined && cf !== undefined) {
+      const penalty = Math.min(100, Math.max(0, Math.round(cf / 10)));
+      base = 100 - penalty;
+    }
+    if (base !== undefined && cf !== undefined) {
+      const normalizedCF = 100 - Math.min(100, Math.max(0, Math.round(cf / 10)));
+      base = Math.round(0.7 * base + 0.3 * normalizedCF);
+    }
+
+    const score = base !== undefined ? Math.max(0, Math.min(100, Math.round(base))) : undefined;
+    // Grade mapping A,B,C,D,F
+    const grade = score === undefined
+      ? undefined
+      : score >= 90 ? 'A'
+      : score >= 75 ? 'B'
+      : score >= 60 ? 'C'
+      : score >= 40 ? 'D' : 'F';
+
+    const gradeColor = grade === 'A' ? 'text-green-500'
+      : grade === 'B' ? 'text-green-400'
+      : grade === 'C' ? 'text-yellow-500'
+      : grade === 'D' ? 'text-orange-500' : 'text-red-500';
+
+    const barColor = grade === 'A' ? 'bg-green-500'
+      : grade === 'B' ? 'bg-green-400'
+      : grade === 'C' ? 'bg-yellow-500'
+      : grade === 'D' ? 'bg-orange-500' : 'bg-red-500';
+
+    return { score, grade, gradeColor, barColor };
+  }, [ecoScore, veganResult]);
 
   const handleBarcodeDetected = useCallback(async (code: string) => {
     if (loading) return;
@@ -86,6 +127,7 @@ const Scan = () => {
       setProductName(info.productName);
       setBrandName(info.brand);
       setProductImage(info.imageUrl);
+      setEcoScore({ score: info.ecoscoreScore, grade: info.ecoscoreGrade, carbonFootprint_100g: info.carbonFootprint_100g });
 
       if (!info.ingredientsText || info.ingredientsText.trim().length === 0) {
         console.warn('Scan: No ingredients found');
@@ -98,7 +140,6 @@ const Scan = () => {
       const result = await checkVeganStatusWithAI(info.ingredientsText);
       setVeganResult(result);
       setDietClass(classifyDiet(result));
-
 
       console.log('Scan: Analysis complete:', result.result);
       setShowResultDialog(true);
@@ -168,7 +209,7 @@ const Scan = () => {
               <CardContent className="py-8">
                 <div className="text-center space-y-4">
                   <div className="w-12 h-12 mx-auto border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
-                  <div className="space-y-2">
+                          <div className="space-y-2">
                     <h3 className="text-lg font-semibold">Analyzing Product</h3>
                     <p className="text-sm text-muted-foreground">
                       {barcode ? `Barcode: ${barcode}` : 'Processing...'}
@@ -321,7 +362,25 @@ const Scan = () => {
                     </div>
                   )}
 
-                {/* Health score removed */}
+                {/* Eco Score (combined with carbon footprint) */}
+                {(combinedEco.score !== undefined || combinedEco.grade !== undefined) && (
+                  <div className="p-3 rounded border bg-muted/10">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-sm font-medium">Eco Score</div>
+                      {combinedEco.grade && (
+                        <div className={`text-base font-bold ${combinedEco.gradeColor}`}>{combinedEco.grade}</div>
+                      )}
+                    </div>
+                    {typeof combinedEco.score === 'number' && (
+                      <>
+                        <div className="flex items-center justify-end text-xs text-muted-foreground">
+                          <span>{combinedEco.score}/100</span>
+                        </div>
+                        <Progress value={combinedEco.score} className={`h-2 mt-1 [&>div]:${combinedEco.barColor}`} />
+                      </>
+                    )}
+                </div>
+                )}
 
                 {veganResult.detectedIngredients && veganResult.detectedIngredients.some(d => d.category === 'notVegan') && (
                   <div>
