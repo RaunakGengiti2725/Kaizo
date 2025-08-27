@@ -50,6 +50,7 @@ const Scan = () => {
   const [productImage, setProductImage] = useState<string | undefined>();
   const [veganResult, setVeganResult] = useState<VeganCheckResult | null>(null);
   const [dietClass, setDietClass] = useState<DietClass>('unclear');
+
   const [processingResult, setProcessingResult] = useState<ImageProcessingResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showResultDialog, setShowResultDialog] = useState(false);
@@ -94,6 +95,7 @@ const Scan = () => {
       const result = await checkVeganStatusWithAI(info.ingredientsText);
       setVeganResult(result);
       setDietClass(classifyDiet(result));
+
 
       console.log('Scan: Analysis complete:', result.result);
       setShowResultDialog(true);
@@ -146,6 +148,7 @@ const Scan = () => {
       <div className="mb-6">
         <h1 className="text-3xl font-bold">Scan Product</h1>
         <p className="text-muted-foreground">Scan a barcode or analyze photos to determine if an item is vegan, vegetarian, or neither.</p>
+
           </div>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'barcode' | 'photos')}>
@@ -356,6 +359,7 @@ const Scan = () => {
                       <div className="p-3 rounded border bg-muted/10">
                         <div className="text-sm font-medium mb-1">Protein Sources</div>
                         <div className="text-xs text-muted-foreground">{veganResult.nutritionalInsights?.proteinSources?.join(', ')}</div>
+
       </div>
                     ) : null}
                     {veganResult.nutritionalInsights?.allergens?.length ? (

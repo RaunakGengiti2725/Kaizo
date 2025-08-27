@@ -67,32 +67,57 @@ const FeaturePreviewHover = () => {
   return (
     <div 
       ref={containerRef}
-      className="relative rounded-3xl bg-gradient-to-br from-emerald-50 to-green-100 dark:from-gray-800 dark:to-gray-700 shadow-2xl overflow-hidden focus:outline-none"
+      className="relative w-full h-[500px] rounded-3xl bg-gradient-to-br from-emerald-50 to-green-100 dark:from-gray-800 dark:to-gray-700 shadow-2xl overflow-hidden focus:outline-none flex items-center justify-center"
       tabIndex={0}
       role="region"
       aria-label="Feature preview. Hover or focus to see Kaizo features."
     >
-      {/* Background visual */}
-      <div className="aspect-[16/10] w-full" />
-
-      {/* Prompt removed: preview is shown immediately */}
-
+      {/* Abstract flowing lines behind the white container */}
+      <motion.div
+        className="absolute w-32 h-px bg-emerald-300/40 dark:bg-emerald-600/40 rounded-full"
+        animate={{
+          x: ['-100%', '100%'],
+          y: ['20%', '80%', '20%'],
+          opacity: [0, 0.6, 0]
+        }}
+        transition={{
+          duration: 8,
+          repeat: Infinity,
+          ease: "easeInOut"
+        }}
+        style={{ top: '25%' }}
+      />
+      <motion.div
+        className="absolute w-24 h-px bg-emerald-400/30 dark:bg-emerald-500/30 rounded-full"
+        animate={{
+          x: ['100%', '-100%'],
+          y: ['70%', '30%', '70%'],
+          opacity: [0, 0.5, 0]
+        }}
+        transition={{
+          duration: 10,
+          repeat: Infinity,
+          ease: "easeInOut",
+          delay: 2
+        }}
+        style={{ top: '65%' }}
+      />
+      
       {/* Tooltip / floating card */}
       <AnimatePresence>
         {open && (
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 w-full px-4 flex justify-center">
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              transition={{ duration: 0.25 }}
-              className="w-[92%] max-w-[720px] rounded-2xl bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border border-emerald-200/60 dark:border-emerald-800/60 shadow-xl"
-              role="dialog"
-              aria-live="polite"
-            >
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            transition={{ duration: 0.25 }}
+            className="w-[95%] max-w-[800px] rounded-2xl bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border border-emerald-200/60 dark:border-emerald-800/60 shadow-xl z-10"
+            role="dialog"
+            aria-live="polite"
+          >
             <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-emerald-100/60 dark:divide-emerald-800/60">
               {/* SCAN */}
-              <div className={`p-5 ${step === 1 ? 'bg-emerald-50/50 dark:bg-emerald-900/20' : ''}`}>
+              <div className={`p-6 h-[200px] flex flex-col ${step === 1 ? 'bg-emerald-50/50 dark:bg-emerald-900/20' : ''}`}>
                 <div className="flex items-center gap-2 mb-2">
                   <Scan className="w-4 h-4 text-emerald-600" />
                   <span className="font-semibold">Scan Products</span>
@@ -114,27 +139,29 @@ const FeaturePreviewHover = () => {
                       />
                     )}
                   </AnimatePresence>
-                  {/* check */}
+                </div>
+                {/* check - positioned below the content box */}
+                <div className="h-6 flex items-center">
                   <AnimatePresence>
                     {step === 1 && (
-                      <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className="absolute right-2 bottom-2 text-emerald-600 text-xs font-semibold">
+                      <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className="text-emerald-600 text-xs font-semibold">
                         ✓ Vegan detected!
                       </motion.div>
                     )}
                   </AnimatePresence>
                 </div>
-                <div className="mt-3">
+                <div className="mt-auto">
                   <Link to="/scan"><Button size="sm" variant="outline">Try Scanning</Button></Link>
                 </div>
               </div>
 
               {/* RECIPES */}
-              <div className={`p-5 ${step === 2 ? 'bg-emerald-50/50 dark:bg-emerald-900/20' : ''}`}>
+              <div className={`p-6 h-[200px] flex flex-col ${step === 2 ? 'bg-emerald-50/50 dark:bg-emerald-900/20' : ''}`}>
                 <div className="flex items-center gap-2 mb-2">
                   <ChefHat className="w-4 h-4 text-emerald-600" />
                   <span className="font-semibold">Find Recipes</span>
                 </div>
-                <div className="relative rounded-md bg-gray-100 dark:bg-gray-800 overflow-hidden p-2">
+                <div className="relative h-16 rounded-md bg-gray-100 dark:bg-gray-800 overflow-hidden p-2">
                   {/* ingredient chips as non-overlapping row */}
                   <div className="flex flex-wrap items-center gap-2">
                     <motion.span className="text-xs px-2 py-0.5 rounded-full bg-white/80 dark:bg-gray-700/70 whitespace-nowrap"
@@ -155,27 +182,29 @@ const FeaturePreviewHover = () => {
                       Garlic
                     </motion.span>
                   </div>
-                  {/* message below chips to prevent overlap */}
+                </div>
+                {/* message - positioned below the content box */}
+                <div className="h-6 flex items-center">
                   <AnimatePresence>
                     {step === 2 && (
-                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mt-2 text-emerald-600 text-xs font-semibold">
+                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-emerald-600 text-xs font-semibold">
                         ✨ Recipes found!
                       </motion.div>
                     )}
                   </AnimatePresence>
                 </div>
-                <div className="mt-3">
+                <div className="mt-auto">
                   <Link to="/recipes"><Button size="sm" variant="outline">Browse Recipes</Button></Link>
                 </div>
               </div>
 
               {/* RESTAURANTS */}
-              <div className={`p-5 ${step === 3 ? 'bg-emerald-50/50 dark:bg-emerald-900/20' : ''}`}>
+              <div className={`p-6 h-[200px] flex flex-col ${step === 3 ? 'bg-emerald-50/50 dark:bg-emerald-900/20' : ''}`}>
                 <div className="flex items-center gap-2 mb-2">
                   <MapPin className="w-4 h-4 text-emerald-600" />
                   <span className="font-semibold">Restaurants</span>
                 </div>
-                <div className="relative rounded-md bg-gray-100 dark:bg-gray-800 overflow-hidden p-2">
+                <div className="relative h-16 rounded-md bg-gray-100 dark:bg-gray-800 overflow-hidden p-2">
                   {/* mini restaurant squares */}
                   <div className="grid grid-cols-3 gap-2">
                     <AnimatePresence>
@@ -222,16 +251,18 @@ const FeaturePreviewHover = () => {
                       </>
                     )}
                   </div>
-                  {/* pin drop */}
+                </div>
+                {/* pin drop - positioned below the content box */}
+                <div className="h-6 flex items-center">
                   <AnimatePresence>
                     {step === 3 && (
-                      <motion.div initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -10, opacity: 0 }} className="mt-2 text-emerald-600 text-xs font-semibold">
+                      <motion.div initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -10, opacity: 0 }} className="text-emerald-600 text-xs font-semibold">
                         📍 Found nearby!
                       </motion.div>
                     )}
                   </AnimatePresence>
                 </div>
-                <div className="mt-3">
+                <div className="mt-auto">
                   <Link to="/map"><Button size="sm" variant="outline">Find Restaurants</Button></Link>
                 </div>
               </div>
@@ -250,7 +281,6 @@ const FeaturePreviewHover = () => {
               </div>
             </div>
             </motion.div>
-          </div>
         )}
       </AnimatePresence>
 
