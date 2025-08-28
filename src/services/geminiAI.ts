@@ -198,13 +198,22 @@ class GeminiAIService {
     cuisineOrFlavor?: string;
     timeMinutes?: number;
   }): string {
+    // Determine diet mode from userPreferences/local storage
+    // Defaults to vegan
+    let diet: 'vegan' | 'vegetarian' = 'vegan';
+    try {
+      const lc = localStorage.getItem('vv_diet_mode');
+      if (lc === 'vegetarian') diet = 'vegetarian';
+    } catch {}
     const parts: string[] = [];
     if (params.mealType) parts.push(`Meal Type: ${params.mealType}`);
     if (params.proteinSource) parts.push(`Protein Source: ${params.proteinSource}`);
     if (params.cuisineOrFlavor) parts.push(`Cuisine/Flavor: ${params.cuisineOrFlavor}`);
     if (params.timeMinutes) parts.push(`Max Time: ${params.timeMinutes} minutes`);
 
-    return `You are a helpful vegan chef. Generate exactly THREE distinct vegan recipe ideas that match the user's filters.
+    const descriptor = diet === 'vegan' ? 'vegan' : 'vegetarian (no meat or fish; eggs/dairy allowed)';
+
+    return `You are a helpful ${descriptor} chef. Generate exactly THREE distinct ${descriptor} recipe ideas that match the user's filters.
 
 USER FILTERS:
 ${parts.join('\n') || 'None provided'}
@@ -220,7 +229,13 @@ Return JSON ONLY in this exact shape:
   }
 
   private buildRecipeDetailPrompt(candidate: GeneratedRecipeCandidate): string {
-    return `Create a complete VEGAN recipe based on this candidate.
+    let diet: 'vegan' | 'vegetarian' = 'vegan';
+    try {
+      const lc = localStorage.getItem('vv_diet_mode');
+      if (lc === 'vegetarian') diet = 'vegetarian';
+    } catch {}
+    const descriptor = diet === 'vegan' ? 'VEGAN' : 'VEGETARIAN (may include eggs/dairy but no meat/fish)';
+    return `Create a complete ${descriptor} recipe based on this candidate.
 
 CANDIDATE:
 ${JSON.stringify(candidate, null, 2)}
@@ -293,7 +308,14 @@ Return JSON ONLY in this exact shape:
     const allergyWarnings = await userPreferences.getAllergyWarnings(userId);
     const dietaryPref = await userPreferences.getDietaryPreference(userId);
 
-    return `You are an expert vegan nutritionist, environmental scientist, and ethical consumption specialist. Analyze the following product ingredients and provide a comprehensive assessment covering vegan status, environmental impact, and ethical considerations.
+    // Read diet mode from localStorage via userPreferences
+    let diet: 'vegan' | 'vegetarian' = 'vegan';
+    try {
+      const lc = localStorage.getItem('vv_diet_mode');
+      if (lc === 'vegetarian') diet = 'vegetarian';
+    } catch {}
+
+    return `You are an expert ${diet} nutritionist, environmental scientist, and ethical consumption specialist. Analyze the following product ingredients and provide a comprehensive assessment covering ${diet} status, environmental impact, and ethical considerations.
 
 USER PREFERENCES:
 ${userPrefs}
@@ -384,7 +406,7 @@ Please provide a detailed analysis in JSON format with the following structure:
 
 ANALYSIS GUIDELINES:
 
-VEGAN ANALYSIS:
+${diet.toUpperCase()} ANALYSIS:
 1. Be extremely thorough and accurate - vegans depend on this information
 2. Consider hidden animal products (like vitamin D3 from sheep wool, L-cysteine from hair/feathers)
 3. Identify processing aids that might not be listed but could be used
@@ -434,7 +456,49 @@ Be helpful, educational, and honest about uncertainties. If information is uncle
         throw new Error('No valid JSON found in AI response');
       }
 
-      const parsedResult = JSON.parse(jsonMatch[0]);
+      // If we matched a code block with a capture group, use the captured JSON (group 1).
+      // Otherwise, use the whole match.
+      let jsonText = (jsonMatch.length > 1 && jsonMatch[1]) ? jsonMatch[1] : jsonMatch[0];
+
+      const tryParse = (text: string) => {
+        try { return JSON.parse(text); } catch { return null; }
+      };
+
+      // First attempt
+      let parsedResult: any = tryParse(jsonText);
+
+      // If it failed, try a few sanitization passes for common AI formatting mistakes
+      if (!parsedResult) {
+        let cleaned = jsonText
+          // Normalize smart quotes and NBSP
+          .replace(/[“”]/g, '"')
+          .replace(/[‘’]/g, "'")
+          .replace(/\u00A0/g, ' ')
+          // Strip JS/JSON comments
+          .replace(/\/\/.*$/gm, '')
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          // Remove trailing commas before } or ]
+          .replace(/,(\s*[}\]])/g, '$1');
+
+        // Quote unquoted object keys (best-effort; anchored after { or ,)
+        cleaned = cleaned.replace(/([,{]\s*)([A-Za-z_][A-Za-z0-9_-]*)(\s*:\s*)/g, '$1"$2"$3');
+
+        parsedResult = tryParse(cleaned);
+      }
+
+      // Last resort: trim to the last balanced closing brace
+      if (!parsedResult) {
+        const first = jsonText.indexOf('{');
+        const last = jsonText.lastIndexOf('}');
+        if (first !== -1 && last !== -1 && last > first) {
+          const sliced = jsonText.slice(first, last + 1);
+          parsedResult = tryParse(sliced);
+        }
+      }
+
+      if (!parsedResult) {
+        throw new Error('Could not parse AI JSON after sanitization');
+      }
       
       // Validate and normalize the response
       return {

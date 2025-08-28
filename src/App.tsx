@@ -17,6 +17,7 @@ import Onboarding from "./pages/Onboarding";
 import SplashScreen from "./pages/SplashScreen";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider } from "./contexts/AuthContext";
+import { DietModeProvider } from "./contexts/DietModeContext";
 import { useSplashScreen } from "./hooks/useSplashScreen";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,7 @@ const App = () => {
         {/* Main App */}
         <BrowserRouter>
           <AuthProvider>
+            <DietModeProvider>
             <Layout>
               <Routes>
                 <Route path="/onboarding" element={<Onboarding />} />
@@ -59,6 +61,7 @@ const App = () => {
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Layout>
+            </DietModeProvider>
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>

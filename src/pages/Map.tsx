@@ -14,8 +14,10 @@ import { toast } from '@/hooks/use-toast';
 import { googleMapsService, VeganRestaurant, SearchFilters, MenuItem } from '@/services/googleMaps';
 import { REAL_VEGAN_RESTAURANTS } from '@/data/veganData';
 import { scrapeVeganMenuForRestaurant } from '@/services/menuScraper';
+import { useDietMode } from '@/contexts/DietModeContext';
 
 const Map = () => {
+  const { mode } = useDietMode();
   const [searchLocation, setSearchLocation] = useState('');
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [selectedRestaurant, setSelectedRestaurant] = useState<VeganRestaurant | null>(null);
@@ -45,6 +47,7 @@ const Map = () => {
   // Memoize filtered local restaurants to avoid recalculation on every render
   const filteredLocalRestaurants = useMemo(() => {
     return REAL_VEGAN_RESTAURANTS.filter(restaurant => {
+      if (mode === 'vegan' && restaurant.type === 'vegetarian') return false;
       if (filters.veganOnly && restaurant.type !== 'vegan') return false;
       if (filters.rating && restaurant.rating < filters.rating) return false;
       return true;
@@ -57,7 +60,7 @@ const Map = () => {
       photos: [], // No photos for local data
       reviews: [] // No reviews for local data
     }));
-  }, [filters.veganOnly, filters.rating]);
+  }, [filters.veganOnly, filters.rating, mode]);
   
   console.log('🏪 Filtered local restaurants:', filteredLocalRestaurants.length);
   console.log('🍽️ Restaurants with vegan menus:', filteredLocalRestaurants.filter(r => r.veganMenu?.length).length);
@@ -327,7 +330,7 @@ const Map = () => {
           </div>
           <CardTitle className="text-center">Search Location</CardTitle>
           <CardDescription className="text-center">
-            Find vegan restaurants in any city
+            Find {mode === 'vegan' ? 'vegan' : 'vegetarian'} restaurants in any city
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
