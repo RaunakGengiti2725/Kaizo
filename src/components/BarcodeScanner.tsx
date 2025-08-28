@@ -6,6 +6,8 @@ import { Card, CardContent } from '@/components/ui/card';
 
 interface BarcodeScannerProps {
   onDetected: (code: string) => void;
+  onError?: (error: string) => void;
+  onStateChange?: (isActive: boolean) => void;
   className?: string;
   autoStart?: boolean;
 }
@@ -18,7 +20,7 @@ export interface BarcodeScannerRef {
  * Camera-based barcode scanner using ZXing. Provides start/stop controls and
  * emits the detected code via onDetected.
  */
-const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(({ onDetected, className, autoStart = true }, ref) => {
+const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(({ onDetected, onError, onStateChange, className, autoStart = true }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
   const [isActive, setIsActive] = useState(false);
@@ -113,6 +115,9 @@ const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(({ onD
     activeRef.current = false;
     setIsActive(false);
     setLastResult(null);
+    if (onStateChange) {
+      onStateChange(false);
+    }
   }, []); // Remove isStarting dependency since we use ref
 
   const scanOnce = useCallback(async () => {
@@ -257,6 +262,11 @@ const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(({ onD
   }, [isActive, onDetected, stop, scanAttempts]); // Remove isStarting since we use ref
 
   const start = useCallback(async () => {
+    if (startingRef.current || activeRef.current) {
+      console.log('BarcodeScanner: Already starting or active, skipping start request');
+      return;
+    }
+
     console.log('BarcodeScanner: Starting scanner');
     startingRef.current = true;
     setIsStarting(true);
@@ -265,10 +275,39 @@ const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(({ onD
     setIsDetecting(false);
 
     try {
+      // Check if mediaDevices is supported
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Camera access not supported in this browser');
+      }
+
       // Get available video devices
       const devices = await navigator.mediaDevices.enumerateDevices();
       const videoDevices = devices.filter(d => d.kind === 'videoinput');
       console.log('Available cameras:', videoDevices.map(d => ({ label: d.label, id: d.deviceId })));
+
+      // If no cameras available, try to request permission first
+      if (videoDevices.length === 0) {
+        console.log('No cameras found, requesting camera permission...');
+        try {
+          // Request basic camera access to trigger permission dialog
+          const tempStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: 'environment' }, 
+            audio: false 
+          });
+          tempStream.getTracks().forEach(track => track.stop());
+          
+          // Re-enumerate devices after permission
+          const newDevices = await navigator.mediaDevices.enumerateDevices();
+          const newVideoDevices = newDevices.filter(d => d.kind === 'videoinput');
+          console.log('Cameras after permission request:', newVideoDevices.map(d => ({ label: d.label, id: d.deviceId })));
+          
+          if (newVideoDevices.length > 0) {
+            videoDevices.push(...newVideoDevices);
+          }
+        } catch (permErr) {
+          console.log('Permission request failed:', permErr);
+        }
+      }
 
       // Prefer back camera for scanning
       let deviceId = videoDevices[0]?.deviceId;
@@ -282,16 +321,29 @@ const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(({ onD
         console.log('Using back camera:', backCamera.label);
       }
 
-      // Get camera stream
-      const constraints: MediaStreamConstraints = {
-        video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'environment' },
-        audio: false,
-      };
+      // Get camera stream with fallback constraints
+      let constraints: MediaStreamConstraints;
+      if (videoDevices.length > 0 && deviceId) {
+        constraints = {
+          video: { deviceId: { exact: deviceId } },
+          audio: false,
+        };
+      } else {
+        constraints = {
+          video: { facingMode: 'environment' },
+          audio: false,
+        };
+      }
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       mediaStreamRef.current = stream;
       if (videoRef.current) {
         const video = videoRef.current;
+
+        // Clear any existing video state to prevent conflicts
+        video.pause();
+        video.currentTime = 0;
+        video.srcObject = null;
 
         // Configure video element for manual playback
         video.setAttribute('playsinline', 'true');
@@ -299,10 +351,43 @@ const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(({ onD
         video.muted = true;
         video.playsInline = true;
 
+        // Set the stream
         video.srcObject = stream;
 
-        // Start playing the video
-        await video.play();
+        // Wait a bit for the stream to be ready before playing
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Check if we're still supposed to be starting (not interrupted)
+        if (!startingRef.current) {
+          console.log('BarcodeScanner: Start was interrupted, stopping');
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+
+        // Start playing the video with retry logic
+        let playAttempts = 0;
+        const maxPlayAttempts = 3;
+        
+        while (playAttempts < maxPlayAttempts) {
+          try {
+            await video.play();
+            break; // Success, exit retry loop
+          } catch (playErr: any) {
+            playAttempts++;
+            console.log(`BarcodeScanner: Play attempt ${playAttempts} failed:`, playErr);
+            
+            if (playErr.name === 'AbortError' && playAttempts < maxPlayAttempts) {
+              // Wait a bit longer before retry
+              await new Promise(resolve => setTimeout(resolve, 200 * playAttempts));
+              continue;
+            } else if (playAttempts >= maxPlayAttempts) {
+              throw new Error(`Failed to play video after ${maxPlayAttempts} attempts: ${playErr.message}`);
+            } else {
+              throw playErr;
+            }
+          }
+        }
+
         // Wait until we have real dimensions (or timeout)
         await waitForVideoReady(video);
         console.log('BarcodeScanner: Video is playing', {
@@ -318,6 +403,9 @@ const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(({ onD
       activeRef.current = true;
       setIsActive(true);
       setIsDetecting(true);
+      if (onStateChange) {
+        onStateChange(true);
+      }
 
       // Start the scan interval immediately since we're not using ZXing's built-in video handling
       if (!scanningIntervalRef.current) {
@@ -329,7 +417,31 @@ const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(({ onD
 
     } catch (err: any) {
       console.error('BarcodeScanner: Failed to start:', err);
-      setCameraError(err?.message || 'Unable to start camera');
+      
+      let errorMessage = 'Unable to start camera';
+      if (err.name === 'NotFoundError') {
+        errorMessage = 'No camera found. Please check your device has a camera and grant permission.';
+      } else if (err.name === 'NotAllowedError') {
+        errorMessage = 'Camera permission denied. Please allow camera access in your browser settings.';
+      } else if (err.name === 'NotReadableError') {
+        errorMessage = 'Camera is in use by another application. Please close other apps using the camera.';
+      } else if (err.name === 'OverconstrainedError') {
+        errorMessage = 'Camera constraints not met. Trying alternative camera settings.';
+      } else if (err.name === 'AbortError') {
+        errorMessage = 'Camera start was interrupted. This usually resolves automatically.';
+        // For AbortError, don't treat it as a fatal error - just log it
+        console.log('BarcodeScanner: AbortError detected, this is usually transient');
+        startingRef.current = false;
+        setIsStarting(false);
+        return; // Don't call stop() for AbortError
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setCameraError(errorMessage);
+      if (onError) {
+        onError(errorMessage);
+      }
       startingRef.current = false;
       setIsStarting(false);
       stop();
@@ -346,8 +458,14 @@ const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(({ onD
   // Auto-start on mount if enabled
   useEffect(() => {
     if (autoStart) {
-      // Fire and forget; UI will keep the start button as fallback
-      start();
+      // Add a small delay to ensure component is fully mounted
+      const startTimer = setTimeout(() => {
+        if (autoStart && !startingRef.current && !activeRef.current) {
+          start();
+        }
+      }, 100);
+      
+      return () => clearTimeout(startTimer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -356,6 +474,8 @@ const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(({ onD
   useEffect(() => {
     return () => {
       console.log('BarcodeScanner: Component unmounting, cleaning up');
+      startingRef.current = false;
+      activeRef.current = false;
       stop();
     };
   }, []); // Empty dependency array - only run on unmount
@@ -369,7 +489,11 @@ const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(({ onD
             className="w-full h-full object-cover"
             playsInline
             muted
-            autoPlay
+            autoPlay={false}
+            onLoadStart={() => console.log('BarcodeScanner: Video load started')}
+            onLoadedMetadata={() => console.log('BarcodeScanner: Video metadata loaded')}
+            onCanPlay={() => console.log('BarcodeScanner: Video can play')}
+            onError={(e) => console.error('BarcodeScanner: Video error:', e)}
           />
 
           {/* Scanning overlay when active */}
