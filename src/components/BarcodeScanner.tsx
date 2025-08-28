@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { NotFoundException } from '@zxing/library';
 import { Button } from '@/components/ui/button';
@@ -10,11 +10,15 @@ interface BarcodeScannerProps {
   autoStart?: boolean;
 }
 
+export interface BarcodeScannerRef {
+  start: () => void;
+}
+
 /**
  * Camera-based barcode scanner using ZXing. Provides start/stop controls and
  * emits the detected code via onDetected.
  */
-const BarcodeScanner = ({ onDetected, className, autoStart = false }: BarcodeScannerProps) => {
+const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(({ onDetected, className, autoStart = true }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
   const [isActive, setIsActive] = useState(false);
@@ -335,6 +339,10 @@ const BarcodeScanner = ({ onDetected, className, autoStart = false }: BarcodeSca
     }
   }, [scanOnce, stop]);
 
+  useImperativeHandle(ref, () => ({
+    start
+  }), [start]);
+
   // Auto-start on mount if enabled
   useEffect(() => {
     if (autoStart) {
@@ -355,10 +363,10 @@ const BarcodeScanner = ({ onDetected, className, autoStart = false }: BarcodeSca
   return (
     <Card className={className}>
       <CardContent className="p-0">
-        <div className="relative w-full aspect-video bg-black">
+        <div className="relative w-full aspect-video rounded-xl overflow-hidden">
           <video
             ref={videoRef}
-            className="w-full h-full object-cover bg-black"
+            className="w-full h-full object-cover"
             playsInline
             muted
             autoPlay
@@ -367,60 +375,20 @@ const BarcodeScanner = ({ onDetected, className, autoStart = false }: BarcodeSca
           {/* Scanning overlay when active */}
           {isActive && (
             <>
-              {/* Scanning frame overlay */}
+              {/* Scanning frame overlay - guides user where to place barcode */}
               <div className="absolute inset-0 pointer-events-none z-10 flex items-center justify-center">
                 <div className="relative w-[80%] max-w-xl aspect-[16/6]">
-                  {/* Corner brackets */}
+                  {/* Corner brackets - visual guide for barcode placement */}
                   <div className="absolute -top-1 -left-1 h-8 w-8 border-t-4 border-l-4 border-white rounded-tl-lg opacity-80" />
                   <div className="absolute -top-1 -right-1 h-8 w-8 border-t-4 border-r-4 border-white rounded-tr-lg opacity-80" />
-                  <div className="absolute -bottom-1 -left-1 h-8 w-8 border-b-4 border-l-4 border-white rounded-bl-lg opacity-80" />
+                  <div className="absolute -bottom-1 -left-1 h-8 w-8 border-b-4 border-l-4 border-white rounded-br-lg opacity-80" />
                   <div className="absolute -bottom-1 -right-1 h-8 w-8 border-b-4 border-r-4 border-white rounded-br-lg opacity-80" />
-
-                  {/* Red scanning line removed per request */}
                 </div>
               </div>
-
-              {/* Scanning status indicator */}
-              <div className="absolute top-4 left-4 z-20">
-                <div className={`px-3 py-1 rounded-full text-sm font-medium border flex items-center gap-2 ${
-                  isStarting
-                    ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-                    : 'bg-green-500/20 text-green-400 border-green-500/30'
-                }`}>
-                  <div className={`w-2 h-2 rounded-full animate-pulse ${
-                    isStarting ? 'bg-blue-400' : 'bg-green-400'
-                  }`} />
-                  {isStarting ? 'Starting...' : 'Scanning...'}
-                </div>
-              </div>
-
-              {/* Controls */}
-              <div className="absolute bottom-4 left-0 right-0 z-20 flex items-center justify-center gap-3">
-                <Button variant="outline" onClick={scanOnce} size="sm" disabled={!isActive || isStarting}>
-                  📱 Manual Scan
-                </Button>
-                <Button variant="secondary" onClick={stop} size="sm">
-                  Stop Scanning
-                </Button>
-              </div>
-
-              {/* Scan counter removed per UX feedback */}
             </>
           )}
 
-          {/* Start button overlay */}
-          {!isActive && !cameraError && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-              <div className="text-center">
-                <Button onClick={start} size="lg" className="mb-4">
-                  📷 Start Barcode Scanner
-                </Button>
-                <p className="text-white/80 text-sm max-w-xs">
-                  Point your camera at a barcode to automatically scan and analyze the product
-                </p>
-              </div>
-            </div>
-          )}
+
 
           {/* Error overlay */}
           {cameraError && (
@@ -440,19 +408,12 @@ const BarcodeScanner = ({ onDetected, className, autoStart = false }: BarcodeSca
             </div>
           )}
 
-          {/* Success feedback (briefly shown when barcode detected) */}
-          {lastResult && !isActive && (
-            <div className="absolute top-4 left-4 z-20">
-              <div className="px-3 py-2 rounded-lg bg-green-500/20 text-green-400 text-sm border border-green-500/30">
-                ✅ Detected: {lastResult}
-              </div>
-            </div>
-          )}
+
         </div>
       </CardContent>
     </Card>
   );
-};
+});
 
 export default BarcodeScanner;
 

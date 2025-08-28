@@ -551,19 +551,19 @@ const Map = () => {
               restaurants.map((restaurant) => (
               <Card 
                 key={restaurant.id} 
-                className="shadow-card hover:shadow-glow transition-smooth cursor-pointer border-0 bg-gradient-card"
+                className="shadow-card hover:shadow-glow transition-smooth cursor-pointer border-0 bg-gradient-card h-fit"
                 onClick={() => setSelectedRestaurant(restaurant)}
               >
                 <CardHeader>
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <CardTitle className="text-lg">{restaurant.name}</CardTitle>
-                      <CardDescription>{restaurant.cuisine}</CardDescription>
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <CardTitle className="text-lg truncate leading-tight">{restaurant.name}</CardTitle>
+                      <CardDescription className="truncate">{restaurant.cuisine}</CardDescription>
                     </div>
                     <Badge 
                       className={restaurant.type === 'vegan' 
-                        ? 'bg-success text-success-foreground' 
-                        : 'bg-secondary text-secondary-foreground'
+                        ? 'bg-success text-success-foreground flex-shrink-0' 
+                        : 'bg-secondary text-secondary-foreground flex-shrink-0'
                       }
                     >
                       {restaurant.type === 'vegan' ? 'Fully Vegan' : 'Vegan Options'}
@@ -571,16 +571,16 @@ const Map = () => {
                   </div>
                 </CardHeader>
                 
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-3">
                   <div className="flex items-center gap-2">
                     <Star className="w-4 h-4 fill-warning text-warning" />
                     <span className="font-semibold">{restaurant.rating}</span>
                     <span className="text-muted-foreground">rating</span>
                   </div>
 
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <MapPin className="w-4 h-4" />
-                    {restaurant.address}
+                  <div className="flex items-start gap-2 text-sm text-muted-foreground">
+                    <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span className="line-clamp-2">{restaurant.address}</span>
                   </div>
 
                   {/* Vegan Options for mixed restaurants */}
@@ -617,25 +617,7 @@ const Map = () => {
         </div>
       )}
 
-      {/* Empty State */}
-      {!userLocation && (
-        <Card className="shadow-card text-center py-12">
-          <CardContent>
-            <MapPin className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Search for restaurants</h3>
-            <p className="text-muted-foreground mb-4">
-              Enter a city name or use your current location to find vegan restaurants
-            </p>
-            <Button 
-              onClick={getCurrentLocation}
-              className="bg-primary hover:bg-primary/90"
-            >
-              <Navigation className="w-4 h-4 mr-2" />
-              Use My Location
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+
 
       {/* Restaurant Details Modal */}
       <Dialog open={!!selectedRestaurant} onOpenChange={() => setSelectedRestaurant(null)}>

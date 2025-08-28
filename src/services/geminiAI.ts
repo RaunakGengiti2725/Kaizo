@@ -422,8 +422,14 @@ Be helpful, educational, and honest about uncertainties. If information is uncle
 
   private parseAIResponse(aiResponse: string, originalText: string): AIAnalysisResult {
     try {
-      // Extract JSON from the response (AI might include extra text)
-      const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+      // Strategy 1: Try to extract JSON from markdown code blocks first
+      let jsonMatch = aiResponse.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+      
+      // Strategy 2: Fallback to general JSON extraction if no markdown wrapper
+      if (!jsonMatch) {
+        jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+      }
+      
       if (!jsonMatch) {
         throw new Error('No valid JSON found in AI response');
       }

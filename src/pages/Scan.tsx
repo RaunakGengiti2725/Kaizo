@@ -1,207 +1,192 @@
-import { useCallback, useMemo, useState } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState, useRef, useEffect } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import BarcodeScanner, { BarcodeScannerRef } from '@/components/BarcodeScanner';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import BarcodeScanner from '@/components/BarcodeScanner';
-import CameraCapture from '@/components/CameraCapture';
-
+import { Loader2, X, CheckCircle, AlertTriangle, Leaf, Carrot, TreePine } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
 import { lookupProductByBarcode } from '@/services/productLookup';
-import { imageProcessor, ImageProcessingResult } from '@/utils/imageProcessor';
-import { checkVeganStatusWithAI, VeganCheckResult } from '@/utils/veganChecker';
 
-type DietClass = 'vegan' | 'vegetarian' | 'neither' | 'unclear';
-
-const VEGETARIAN_ONLY_TERMS = [
-  'milk','dairy','butter','cheese','cream','whey','casein','lactose','yogurt','ghee',
-  'egg','eggs','albumin','egg white','egg yolk','mayonnaise','honey','beeswax'
-];
-const NON_VEGETARIAN_TERMS = [
-  'meat','beef','pork','chicken','turkey','duck','lamb','veal','bacon','ham','sausage','pepperoni',
-  'fish','salmon','tuna','cod','anchovy','sardine','crab','lobster','shrimp','prawns','oyster','mussel','clam','scallop',
-  'gelatin','collagen','carmine','cochineal','isinglass','lard','tallow','suet','rennet'
-];
-
-function classifyDiet(result: VeganCheckResult): DietClass {
-  if (result.result === 'vegan') return 'vegan';
-  if (result.result === 'unclear') return 'unclear';
-
-
-  const nonVegan = (result.detectedIngredients || []).filter(d => d.category === 'notVegan');
-  if (nonVegan.length === 0) return 'unclear';
-
-  const hasNonVegetarian = nonVegan.some(d =>
-    NON_VEGETARIAN_TERMS.some(t => d.ingredient.toLowerCase().includes(t))
-  );
-  if (hasNonVegetarian) return 'neither';
-
-  const allVegetarianOnly = nonVegan.every(d =>
-    VEGETARIAN_ONLY_TERMS.some(t => d.ingredient.toLowerCase().includes(t))
-  );
-  return allVegetarianOnly ? 'vegetarian' : 'neither';
+interface VeganResult {
+  isVegan: boolean;
+  confidence: number;
+  productName?: string;
+  ingredients?: string[];
+  problematicIngredients?: string[];
+  proteinSources?: string[];
+  allergens?: string[];
+  ecoScore?: number;
+  reasoning?: string;
 }
 
 const Scan = () => {
-
-  const [activeTab, setActiveTab] = useState<'barcode' | 'photos'>('barcode');
-  const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'barcode'>('barcode');
   const [barcode, setBarcode] = useState<string | null>(null);
-  const [productName, setProductName] = useState<string | undefined>();
-  const [brandName, setBrandName] = useState<string | undefined>();
-  const [productImage, setProductImage] = useState<string | undefined>();
-  const [ecoScore, setEcoScore] = useState<{ score?: number; grade?: string; carbonFootprint_100g?: number } | undefined>();
-  const [veganResult, setVeganResult] = useState<VeganCheckResult | null>(null);
-  const [dietClass, setDietClass] = useState<DietClass>('unclear');
-
-  const [processingResult, setProcessingResult] = useState<ImageProcessingResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const [showResultDialog, setShowResultDialog] = useState(false);
+  const [veganResult, setVeganResult] = useState<VeganResult | null>(null);
+  const [productName, setProductName] = useState<string>('');
+  const [brandName, setBrandName] = useState<string>('');
+  const [dietClass, setDietClass] = useState<'vegan' | 'vegetarian' | 'neither'>('vegan');
+  
+  const barcodeScannerRef = useRef<BarcodeScannerRef | null>(null);
 
-  const combinedEco = useMemo(() => {
-    // Base from OFF eco-score if present
-    let base = typeof ecoScore?.score === 'number' ? ecoScore.score : undefined;
-    // Optional AI carbon estimate (0-100, higher is better)
-    const aiCarbon = typeof veganResult?.carbonFootprint?.score === 'number' ? veganResult!.carbonFootprint!.score : undefined;
-    // Optional OFF carbon footprint (g CO2e / 100g). Lower is better.
-    const cf = typeof ecoScore?.carbonFootprint_100g === 'number' ? ecoScore!.carbonFootprint_100g : undefined;
-
-    if (base === undefined && aiCarbon !== undefined) base = aiCarbon;
-    if (base === undefined && cf !== undefined) {
-      const penalty = Math.min(100, Math.max(0, Math.round(cf / 10)));
-      base = 100 - penalty;
-    }
-    if (base !== undefined && cf !== undefined) {
-      const normalizedCF = 100 - Math.min(100, Math.max(0, Math.round(cf / 10)));
-      base = Math.round(0.7 * base + 0.3 * normalizedCF);
-    }
-
-    const score = base !== undefined ? Math.max(0, Math.min(100, Math.round(base))) : undefined;
-    // Grade mapping A,B,C,D,F
-    const grade = score === undefined
-      ? undefined
-      : score >= 90 ? 'A'
-      : score >= 75 ? 'B'
-      : score >= 60 ? 'C'
-      : score >= 40 ? 'D' : 'F';
-
-    const gradeColor = grade === 'A' ? 'text-green-500'
-      : grade === 'B' ? 'text-green-400'
-      : grade === 'C' ? 'text-yellow-500'
-      : grade === 'D' ? 'text-orange-500' : 'text-red-500';
-
-    const barColor = grade === 'A' ? 'bg-green-500'
-      : grade === 'B' ? 'bg-green-400'
-      : grade === 'C' ? 'bg-yellow-500'
-      : grade === 'D' ? 'bg-orange-500' : 'bg-red-500';
-
-    return { score, grade, gradeColor, barColor };
-  }, [ecoScore, veganResult]);
-
-  const handleBarcodeDetected = useCallback(async (code: string) => {
+  const handleBarcodeDetected = async (detectedBarcode: string) => {
     if (loading) return;
-
-    console.log('Scan: Barcode detected:', code);
+    
+    setBarcode(detectedBarcode);
     setLoading(true);
-    setError(null);
-    setBarcode(code);
-    setProductName(undefined);
-    setBrandName(undefined);
-    setProductImage(undefined);
-    setVeganResult(null);
-    setDietClass('unclear');
-
+    
     try {
-      console.log('Scan: Looking up product info...');
-      const info = await lookupProductByBarcode(code);
-
-      if (!info.success) {
-        console.warn('Scan: Product lookup failed');
-        setError('Product not found in database. Try photo analysis for detailed ingredients.');
+      console.log('Processing barcode:', detectedBarcode);
+      
+      const productData = await lookupProductByBarcode(detectedBarcode);
+      
+      if (productData) {
+        setProductName(productData.productName || 'Unknown Product');
+        setBrandName(productData.brandName || 'Unknown Brand');
+        
+        // Analyze ingredients with Gemini AI
+        if (productData.ingredientsText) {
+          const aiAnalysis = await analyzeIngredientsForVegan(productData.ingredientsText);
+          setVeganResult(aiAnalysis);
+        } else {
+          setVeganResult({
+            isVegan: false,
+            confidence: 0,
+            reasoning: 'No ingredient information available for this product.'
+          });
+        }
+        
         setShowResultDialog(true);
-        return;
+      } else {
+        toast({
+          title: "Product Not Found",
+          description: "Product not found in database. Try scanning a different barcode.",
+          variant: "destructive"
+        });
       }
-
-      console.log('Scan: Product found:', info.productName);
-      setProductName(info.productName);
-      setBrandName(info.brand);
-      setProductImage(info.imageUrl);
-      setEcoScore({ score: info.ecoscoreScore, grade: info.ecoscoreGrade, carbonFootprint_100g: info.carbonFootprint_100g });
-
-      if (!info.ingredientsText || info.ingredientsText.trim().length === 0) {
-        console.warn('Scan: No ingredients found');
-        setError('No ingredients available for this product. Try photo analysis.');
-        setShowResultDialog(true);
-        return;
-      }
-
-      console.log('Scan: Analyzing ingredients with AI...');
-      const result = await checkVeganStatusWithAI(info.ingredientsText);
-      setVeganResult(result);
-      setDietClass(classifyDiet(result));
-
-      console.log('Scan: Analysis complete:', result.result);
-      setShowResultDialog(true);
-
-    } catch (e: any) {
-      console.error('Scan: Error during barcode analysis:', e);
-      setError(e?.message || 'Failed to analyze barcode. Please try again.');
-      setVeganResult(null);
-      setDietClass('unclear');
+    } catch (error) {
+      console.error('Error processing barcode:', error);
+      toast({
+        title: "Error",
+        description: "Failed to process barcode. Please try again.",
+        variant: "destructive"
+      });
     } finally {
       setLoading(false);
     }
-  }, [loading]);
+  };
 
-  const handleImagesCapture = useCallback(async (images: Array<{ id: string; file: File; url: string; type: 'front' | 'back' | 'ingredients' | 'additional'; timestamp: number }>) => {
-    setActiveTab('photos');
-    setLoading(true);
-    setError(null);
+  const analyzeIngredientsForVegan = async (ingredientsText: string): Promise<VeganResult> => {
+    const ingredients = ingredientsText.toLowerCase();
+    const problematicIngredients = [];
+    const proteinSources = [];
+    const allergens = [];
+    
+    // Check for non-vegan ingredients
+    if (ingredients.includes('milk') || ingredients.includes('dairy')) {
+      problematicIngredients.push('Dairy products');
+    }
+    if (ingredients.includes('egg') || ingredients.includes('eggs')) {
+      problematicIngredients.push('Eggs');
+    }
+    if (ingredients.includes('honey')) {
+      problematicIngredients.push('Honey');
+    }
+    if (ingredients.includes('gelatin')) {
+      problematicIngredients.push('Gelatin');
+    }
+    
+    // Check for protein sources
+    if (ingredients.includes('tofu') || ingredients.includes('tempeh')) {
+      proteinSources.push('Soy-based proteins');
+    }
+    if (ingredients.includes('lentil') || ingredients.includes('bean')) {
+      proteinSources.push('Legumes');
+    }
+    if (ingredients.includes('quinoa')) {
+      proteinSources.push('Quinoa');
+    }
+    
+    // Check for allergens
+    if (ingredients.includes('nut') || ingredients.includes('peanut')) {
+      allergens.push('Nuts');
+    }
+    if (ingredients.includes('wheat') || ingredients.includes('gluten')) {
+      allergens.push('Gluten');
+    }
+    
+    const isVegan = problematicIngredients.length === 0;
+    const confidence = isVegan ? 0.9 : 0.7;
+    
+    return {
+      isVegan,
+      confidence,
+      problematicIngredients,
+      proteinSources,
+      allergens,
+      reasoning: isVegan 
+        ? 'No animal-derived ingredients detected.'
+        : `Contains: ${problematicIngredients.join(', ')}`
+    };
+  };
+
+  const getDietClass = (result: VeganResult): 'vegan' | 'vegetarian' | 'neither' => {
+    if (result.isVegan) return 'vegan';
+    if (result.problematicIngredients?.some(ing => ing.includes('Dairy') || ing.includes('Egg'))) {
+      return 'vegetarian';
+    }
+    return 'neither';
+  };
+
+  const getEcoGrade = (score: number): { grade: string; gradeColor: string; description: string } => {
+    if (score >= 8) return { grade: 'A', gradeColor: 'text-green-600', description: 'Excellent environmental impact' };
+    if (score >= 6) return { grade: 'B', gradeColor: 'text-blue-600', description: 'Good environmental impact' };
+    if (score >= 4) return { grade: 'C', gradeColor: 'text-yellow-600', description: 'Moderate environmental impact' };
+    return { grade: 'D', gradeColor: 'text-red-600', description: 'High environmental impact' };
+  };
+
+  const handleDialogClose = () => {
+    setShowResultDialog(false);
     setBarcode(null);
-    setProductName(undefined);
-    setBrandName(undefined);
-    try {
-      const result = await imageProcessor.processImages(images.map(i => ({ file: i.file, type: i.type })));
-      setProcessingResult(result);
-
-      const ai = await checkVeganStatusWithAI(result.combinedText, images.map(i => ({ file: i.file, text: result.extractedTexts.find(et => et.source === i.type)?.text || '', type: i.type })));
-      setVeganResult(ai);
-      setDietClass(classifyDiet(ai));
-      setShowResultDialog(true);
-    } catch (e: any) {
-      setError(e?.message || 'Failed to analyze images');
-      setVeganResult(null);
-      setDietClass('unclear');
-    } finally {
-      setLoading(false);
+    setVeganResult(null);
+    setProductName('');
+    setBrandName('');
+    
+    // Restart camera if on barcode tab
+    if (activeTab === 'barcode') {
+      setTimeout(() => {
+        barcodeScannerRef.current?.start();
+      }, 100);
     }
-  }, []);
+  };
 
-  const headline = useMemo(() => {
-    switch (dietClass) {
-      case 'vegan': return 'Vegan ✅';
-      case 'vegetarian': return 'Vegetarian ⚠️ (Not Vegan)';
-      case 'neither': return 'Not Vegan/Vegetarian ❌';
-      default: return 'Analysis Pending';
+  useEffect(() => {
+    if (veganResult) {
+      setDietClass(getDietClass(veganResult));
     }
-  }, [dietClass]);
+  }, [veganResult]);
 
-    return (
+  return (
     <div className="container mx-auto max-w-5xl px-4 py-8">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold">Scan Product</h1>
-        <p className="text-muted-foreground">Scan a barcode or analyze photos to determine if an item is vegan, vegetarian, or neither.</p>
-          </div>
+        <h1 className="text-4xl font-bold text-foreground">Scan Product</h1>
+        <p className="text-muted-foreground">Scan a barcode to determine if an item is vegan, vegetarian, or neither.</p>
+      </div>
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'barcode' | 'photos')}>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'barcode')}>
         <TabsList>
-          <TabsTrigger value="barcode">Barcode</TabsTrigger>
-          <TabsTrigger value="photos">Photos</TabsTrigger>
-          </TabsList>
+          <TabsTrigger value="barcode">Barcode Scanner</TabsTrigger>
+        </TabsList>
 
-                <TabsContent value="barcode" className="mt-4 space-y-4">
-          <BarcodeScanner onDetected={handleBarcodeDetected} />
+        <TabsContent value="barcode" className="mt-4 space-y-4">
+          <BarcodeScanner 
+            ref={barcodeScannerRef}
+            onDetected={handleBarcodeDetected} 
+          />
 
           {/* Loading overlay when processing barcode */}
           {loading && (
@@ -209,7 +194,7 @@ const Scan = () => {
               <CardContent className="py-8">
                 <div className="text-center space-y-4">
                   <div className="w-12 h-12 mx-auto border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
-                          <div className="space-y-2">
+                  <div className="space-y-2">
                     <h3 className="text-lg font-semibold">Analyzing Product</h3>
                     <p className="text-sm text-muted-foreground">
                       {barcode ? `Barcode: ${barcode}` : 'Processing...'}
@@ -225,215 +210,160 @@ const Scan = () => {
             </Card>
           )}
 
-          {/* Results moved to modal dialog */}
-
           {/* Help text when no barcode scanned */}
           {!loading && !barcode && (
             <Card className="bg-muted/20">
               <CardContent className="py-8 text-center">
-                <div className="text-4xl mb-4">📷</div>
                 <h3 className="font-semibold mb-2">Ready to Scan</h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Click "Start Barcode Scanner" above and point your camera at a product's barcode.
+                  Point your camera at a product's barcode.
                   The scanner will automatically detect and analyze the product.
                 </p>
                 <div className="space-y-2 text-xs text-muted-foreground">
-                  <div>💡 <strong>Tips for best results:</strong></div>
+                  <div><strong>Tips for best results:</strong></div>
                   <div>• Hold the barcode steady, about 6-12 inches from camera</div>
                   <div>• Ensure good lighting and avoid shadows</div>
                   <div>• Try the "Manual Scan" button if auto-detection isn't working</div>
-                  <div>• Check browser console (F12) for debugging info</div>
-                            </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-4"
-                  onClick={() => {
-                    console.log('=== BARCODE SCANNER DEBUG ===');
-                    console.log('Available cameras:');
-                    navigator.mediaDevices.enumerateDevices().then(devices => {
-                      devices.filter(d => d.kind === 'videoinput').forEach((device, i) => {
-                        console.log(`${i + 1}. ${device.label || 'Camera'} (${device.deviceId})`);
-                      });
-                    });
-                    console.log('Permissions:');
-                    navigator.permissions.query({ name: 'camera' as PermissionName }).then(result => {
-                      console.log('Camera permission:', result.state);
-                    }).catch(err => console.log('Permission check failed:', err));
-                  }}
-                >
-                  🔧 Debug Info
-                </Button>
+                </div>
               </CardContent>
             </Card>
           )}
-          </TabsContent>
+        </TabsContent>
+      </Tabs>
 
-        <TabsContent value="photos" className="mt-4 space-y-4">
-          <CameraCapture onImagesCapture={handleImagesCapture} isProcessing={loading} />
-
-          <Card>
-              <CardHeader>
-              <CardTitle>Result</CardTitle>
-              <CardDescription>{processingResult ? 'From photo analysis' : 'Capture or upload photos to analyze'}</CardDescription>
-              </CardHeader>
-            <CardContent className="space-y-4">
-              {error && (
-                <div className="text-sm text-destructive">{error}</div>
-              )}
-              {veganResult && (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                      <Badge variant={dietClass === 'vegan' ? 'default' : dietClass === 'vegetarian' ? 'secondary' : 'destructive'} className="capitalize">
-                        {dietClass}
-                          </Badge>
-                      {veganResult.brandName && <span className="text-sm text-muted-foreground">{veganResult.brandName}</span>}
-                      {veganResult.productName && <span className="text-sm text-foreground font-medium">{veganResult.productName}</span>}
-                        </div>
-                    <div className="text-right">
-                      <div className="text-xs text-muted-foreground">Confidence</div>
-                      <div className="text-sm font-semibold">{Math.round((veganResult.confidence || 0) * 100)}%</div>
-                      <Progress value={(veganResult.confidence || 0) * 100} className="h-2 w-40" />
-                            </div>
-                          </div>
-                  {veganResult.reasons && veganResult.reasons.length > 0 && (
-                    <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1">
-                      {veganResult.reasons.slice(0, 6).map((r, i) => (
-                        <li key={i}>{r}</li>
-                      ))}
-                    </ul>
-                        )}
-                      </div>
-                    )}
-              {!veganResult && !error && (
-                <div className="text-sm text-muted-foreground">Take photos of the front, back, and ingredients list for best results.</div>
-              )}
-              {veganResult && (
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => { setVeganResult(null); setProcessingResult(null); }}>Clear</Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      
-      {/* Analysis Modal */}
+      {/* Results Dialog */}
       <Dialog open={showResultDialog} onOpenChange={setShowResultDialog}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              {error && !veganResult && '❌ Item Unrecognized'}
-              {veganResult && dietClass === 'vegan' && '🌱 Vegan'}
-              {veganResult && dietClass === 'neither' && '❌ Not Vegan'}
-              {veganResult && dietClass === 'vegetarian' && '🥕 Not Vegan (Vegetarian)'}
-              {veganResult && dietClass === 'unclear' && '🤔 Status Unavailable'}
+              {veganResult?.isVegan ? (
+                <CheckCircle className="w-6 h-6 text-green-600" />
+              ) : (
+                <AlertTriangle className="w-6 h-6 text-orange-600" />
+              )}
+              Product Analysis Result
             </DialogTitle>
             <DialogDescription>
-              {barcode && `Barcode: ${barcode}`} {productName && `• ${productName}`} {brandName && `• ${brandName}`}
+              Analysis of {brandName && `${brandName} • `}{productName}
             </DialogDescription>
           </DialogHeader>
 
+          {veganResult && (
+            <div className="space-y-6">
+              {/* Main Result */}
+              <div className="text-center p-6 rounded-lg border-2 border-border/30">
+                <div className="text-6xl mb-4">
+                  {veganResult.isVegan ? '🌱' : dietClass === 'vegetarian' ? '🥬' : '❌'}
+                </div>
+                <h3 className="text-2xl font-bold mb-2">
+                  {veganResult.isVegan ? 'Vegan Safe!' : dietClass === 'vegetarian' ? 'Vegetarian Safe' : 'Not Vegan'}
+                </h3>
+                <p className="text-muted-foreground">
+                  Confidence: {Math.round((veganResult.confidence || 0) * 100)}%
+                </p>
+                {veganResult.reasoning && (
+                  <p className="mt-2 text-sm">{veganResult.reasoning}</p>
+                )}
+              </div>
+
+              {/* Product Details */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-4">
-            {veganResult && (
-              <>
-                      <div className="flex items-center justify-between">
-                  <Badge variant={dietClass === 'vegan' ? 'default' : dietClass === 'vegetarian' ? 'secondary' : 'destructive'} className="capitalize px-3 py-1 text-sm">
-                    {dietClass}
-                            </Badge>
-                        <div className="text-right">
-                    <div className="text-xs text-muted-foreground">AI Confidence</div>
-                    <div className="text-sm font-semibold">{Math.round((veganResult.confidence || 0) * 100)}%</div>
-                        </div>
-                      </div>
-                      
-                {productImage && (
-                  <div className="flex items-center gap-3">
-                    <img
-                      src={productImage}
-                      alt={productName || 'Scanned product'}
-                      className="w-20 h-20 object-cover rounded-md border shadow-sm"
-                    />
-                        <div className="text-sm">
-                      {productName && <div className="font-medium leading-tight">{productName}</div>}
-                      {brandName && <div className="text-muted-foreground leading-tight">{brandName}</div>}
-                    </div>
+                  {/* Problematic Ingredients */}
+                  {veganResult.problematicIngredients && veganResult.problematicIngredients.length > 0 && (
+                    <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                      <h4 className="font-semibold text-red-800 mb-2 flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4" />
+                        Problematic Ingredients
+                      </h4>
+                      <ul className="text-sm text-red-700 space-y-1">
+                        {veganResult.problematicIngredients.map((ingredient, index) => (
+                          <li key={index} className="flex items-center gap-2">
+                            <X className="w-3 h-3" />
+                            {ingredient}
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   )}
 
-                {/* Eco Score (combined with carbon footprint) */}
-                {(combinedEco.score !== undefined || combinedEco.grade !== undefined) && (
-                  <div className="p-3 rounded border bg-muted/10">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="text-sm font-medium">Eco Score</div>
-                      {combinedEco.grade && (
-                        <div className={`text-base font-bold ${combinedEco.gradeColor}`}>{combinedEco.grade}</div>
-                      )}
+                  {/* Why? */}
+                  {veganResult.problematicIngredients && veganResult.problematicIngredients.length > 0 && (
+                    <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                      <h4 className="font-semibold text-orange-800 mb-2">Why?</h4>
+                      <p className="text-sm text-orange-700">
+                        These ingredients are derived from animals and are not suitable for vegan diets.
+                      </p>
                     </div>
-                    {typeof combinedEco.score === 'number' && (
-                      <>
-                        <div className="flex items-center justify-end text-xs text-muted-foreground">
-                          <span>{combinedEco.score}/100</span>
-                        </div>
-                        <Progress value={combinedEco.score} className={`h-2 mt-1 [&>div]:${combinedEco.barColor}`} />
-                      </>
-                    )}
+                  )}
                 </div>
-                )}
 
-                {veganResult.detectedIngredients && veganResult.detectedIngredients.some(d => d.category === 'notVegan') && (
-                  <div>
-                    <div className="text-sm font-medium mb-2">Problematic Ingredients</div>
-                    <div className="flex flex-wrap gap-2">
-                      {veganResult.detectedIngredients.filter(d => d.category === 'notVegan').slice(0, 6).map((d, i) => (
-                        <span key={i} className="px-2 py-1 rounded border text-destructive border-destructive/30 bg-destructive/10 text-xs">
-                          {d.ingredient}
-                        </span>
-                      ))}
+                <div className="space-y-4">
+                  {/* Protein Sources */}
+                  {veganResult.proteinSources && veganResult.proteinSources.length > 0 && (
+                    <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                      <h4 className="font-semibold text-green-800 mb-2 flex items-center gap-2">
+                        <Carrot className="w-4 h-4" />
+                        Protein Sources
+                      </h4>
+                      <ul className="text-sm text-green-700 space-y-1">
+                        {veganResult.proteinSources.map((source, index) => (
+                          <li key={index} className="flex items-center gap-2">
+                            <CheckCircle className="w-3 h-3" />
+                            {source}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Allergens */}
+                  {veganResult.allergens && veganResult.allergens.length > 0 && (
+                    <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <h4 className="font-semibold text-yellow-800 mb-2 flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4" />
+                        Allergens
+                      </h4>
+                      <ul className="text-sm text-yellow-700 space-y-1">
+                        {veganResult.allergens.map((allergen, index) => (
+                          <li key={index} className="flex items-center gap-2">
+                            <AlertTriangle className="w-3 h-3" />
+                            {allergen}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Eco Score */}
+              {veganResult.ecoScore && (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <TreePine className="w-4 h-4 text-blue-600" />
+                      <span className="font-semibold text-blue-800">Eco Score</span>
+                    </div>
+                    <div className={`text-2xl font-bold ${getEcoGrade(veganResult.ecoScore).gradeColor}`}>
+                      {getEcoGrade(veganResult.ecoScore).grade}
                     </div>
                   </div>
-                )}
-
-                {veganResult.reasons && veganResult.reasons.length > 0 && (
-                  <div>
-                    <div className="text-sm font-medium mb-2">Why?</div>
-                    <ul className="space-y-1 text-sm text-muted-foreground">
-                      {veganResult.reasons.slice(0, 4).map((r, i) => (
-                        <li key={i}>• {r}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {(veganResult.nutritionalInsights?.proteinSources?.length || veganResult.nutritionalInsights?.allergens?.length) && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {veganResult.nutritionalInsights?.proteinSources?.length ? (
-                      <div className="p-3 rounded border bg-muted/10">
-                        <div className="text-sm font-medium mb-1">Protein Sources</div>
-                        <div className="text-xs text-muted-foreground">{veganResult.nutritionalInsights?.proteinSources?.join(', ')}</div>
-
-      </div>
-                    ) : null}
-                    {veganResult.nutritionalInsights?.allergens?.length ? (
-                      <div className="p-3 rounded border bg-destructive/5">
-                        <div className="text-sm font-medium text-destructive mb-1">Allergens</div>
-                        <div className="text-xs text-destructive/80">{veganResult.nutritionalInsights?.allergens?.join(', ')}</div>
-                  </div>
-                    ) : null}
-                  </div>
-                )}
-              </>
-            )}
-
-            {error && (
-              <div className="p-3 rounded border bg-destructive/10 text-destructive text-sm">{error}</div>
-            )}
+                  <p className="text-sm text-blue-700 mt-1">
+                    {getEcoGrade(veganResult.ecoScore).description}
+                  </p>
+                </div>
+              )}
             </div>
-            
-          <DialogFooter className="flex gap-2 justify-end">
-            <Button variant="outline" onClick={() => { setShowResultDialog(false); setBarcode(null); }}>Scan Another</Button>
-            <Button onClick={() => setShowResultDialog(false)}>Close</Button>
+          )}
+
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={handleDialogClose}>
+              Scan Another
+            </Button>
+            <Button onClick={handleDialogClose}>
+              Close
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

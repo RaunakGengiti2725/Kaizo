@@ -235,38 +235,55 @@ Make this recipe truly unique and specific to ${customRecipeInput.trim()}. Inclu
       // Multiple parsing strategies for robustness
       let recipeData = null;
       
-      // Strategy 1: Direct JSON parse
-      try {
-        recipeData = JSON.parse(text);
-        console.log('✅ JSON parsed successfully with strategy 1');
-      } catch (e) {
-        console.log('❌ Strategy 1 failed:', e.message);
-        
-        // Strategy 2: Extract JSON from text
+      // Strategy 1: Try to extract JSON from markdown code blocks first
+      const markdownJsonMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+      if (markdownJsonMatch) {
+        try {
+          recipeData = JSON.parse(markdownJsonMatch[1]);
+          console.log('✅ JSON parsed successfully with strategy 1 (markdown extraction)');
+        } catch (e) {
+          console.log('❌ Strategy 1 (markdown) failed:', e.message);
+        }
+      }
+      
+      // Strategy 2: Direct JSON parse (if no markdown wrapper)
+      if (!recipeData) {
+        try {
+          recipeData = JSON.parse(text);
+          console.log('✅ JSON parsed successfully with strategy 2 (direct parse)');
+        } catch (e) {
+          console.log('❌ Strategy 2 (direct) failed:', e.message);
+        }
+      }
+      
+      // Strategy 3: Extract JSON from text using improved regex
+      if (!recipeData) {
         const jsonMatch = text.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           try {
             recipeData = JSON.parse(jsonMatch[0]);
-            console.log('✅ JSON parsed successfully with strategy 2');
+            console.log('✅ JSON parsed successfully with strategy 3 (regex extraction)');
           } catch (e2) {
-            console.log('❌ Strategy 2 failed:', e2.message);
-            
-            // Strategy 3: Manual parsing for common patterns
-            console.log('⚠️ Using manual fallback parsing');
-            recipeData = {
-              title: customRecipeInput.trim(),
-              desc: `Vegan ${customRecipeInput.trim()}`,
-              time: 25,
-              type: "Main",
-              protein: "Plant-based",
-              cuisine: "Modern",
-              ingredients: ["2 cups main ingredient", "1 tbsp oil", "spices"],
-              steps: ["Mix ingredients", "Cook 20 min", "Serve"],
-              servings: 2,
-              nutrition: {cal: 250, protein: 12, carbs: 30, fat: 8}
-            };
+            console.log('❌ Strategy 3 (regex) failed:', e2.message);
           }
         }
+      }
+      
+      // Strategy 4: Manual parsing for common patterns
+      if (!recipeData) {
+        console.log('⚠️ Using manual fallback parsing');
+        recipeData = {
+          title: customRecipeInput.trim(),
+          desc: `Vegan ${customRecipeInput.trim()}`,
+          time: 25,
+          type: "Main",
+          protein: "Plant-based",
+          cuisine: "Modern",
+          ingredients: ["2 cups main ingredient", "1 tbsp oil", "spices"],
+          steps: ["Mix ingredients", "Cook 20 min", "Serve"],
+          servings: 2,
+          nutrition: {cal: 250, protein: 12, carbs: 30, fat: 8}
+        };
       }
       
       if (recipeData) {

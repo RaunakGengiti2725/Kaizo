@@ -99,7 +99,7 @@ const MealPlanner = () => {
         >
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
             <div>
-              <h1 className="text-4xl lg:text-5xl font-bold text-foreground mb-2">
+              <h1 className="text-4xl font-bold text-foreground mb-2">
                 Meal Planner
               </h1>
               <p className="text-xl text-muted-foreground">
@@ -129,7 +129,7 @@ const MealPlanner = () => {
                   resetWeek();
                   toast({
                     title: "Meal Planner Reset",
-                    description: "All meals have been cleared from your plan.",
+                    description: "Current week cleared. Previous weeks are saved and can be accessed by navigating to them.",
                   });
                 }}
                 variant="outline"

@@ -307,48 +307,93 @@ export const ShoppingListModal: React.FC<ShoppingListModalProps> = ({
       // Now enhance it with AI if available
       if (geminiAI.isConfigured()) {
         try {
-          // Create a detailed prompt for the AI
-          const prompt = `You are an AI nutritionist helping to create an optimized shopping list. 
+          // Check if we have custom food items that need ingredient breakdown
+          const hasCustomFoodItems = basicShoppingList.some(item => 
+            item.notes === 'Custom food item - will be enhanced by AI'
+          );
           
+          console.log('🤖 Starting AI enhancement...', {
+            totalItems: basicShoppingList.length,
+            customFoodItems: basicShoppingList.filter(item => item.notes === 'Custom food item - will be enhanced by AI').map(item => item.name),
+            hasCustomFoodItems
+          });
+
+          // Create a detailed prompt for the AI
+          const prompt = `You are an AI nutritionist helping to create an optimized shopping list for vegan/plant-based cooking.
+
           Based on this basic shopping list: ${JSON.stringify(basicShoppingList, null, 2)}
           
+          CRITICAL TASK: For any custom food items marked as "Custom food item - will be enhanced by AI", you MUST break them down into their individual ingredients with proper quantities and units.
+          
           Please enhance this list by:
-          1. For custom food items (marked as "Custom food item - will be enhanced by AI"), generate a complete list of ingredients needed to make that recipe
-          2. Optimizing quantities based on typical household usage
-          3. Adding missing essential items that complement these recipes
-          4. Suggesting budget-friendly alternatives
-          5. Adding helpful cooking tips
+          1. **CUSTOM FOOD ITEMS (HIGH PRIORITY)**: For each custom food item, generate a complete list of ingredients needed to make that recipe. For example:
+             - "Tofu Scramble" → ["1 block firm tofu", "2 tbsp olive oil", "1 onion", "2 cloves garlic", "1 bell pepper", "1 tsp turmeric", "salt and pepper"]
+             - "Lentil Curry" → ["1 cup dried lentils", "1 can coconut milk", "2 tbsp curry powder", "1 onion", "3 cloves garlic", "1 inch ginger", "2 tomatoes"]
+          2. **Optimize quantities** based on typical household usage (2-4 servings)
+          3. **Add missing essential items** that complement these recipes
+          4. **Suggest budget-friendly alternatives** where possible
+          5. **Add helpful cooking tips** for the custom recipes
           
-          IMPORTANT: For any custom food items, break them down into their individual ingredients with proper quantities and units.
+          IMPORTANT REQUIREMENTS:
+          - All ingredients must be vegan/plant-based
+          - Use standard cooking measurements (cups, tbsp, tsp, pieces, etc.)
+          - Quantities should be realistic for home cooking
+          - Categorize items properly (Produce, Pantry, Spices, etc.)
           
-          Return your response in this exact JSON format:
+          CRITICAL: You MUST return ONLY valid JSON. No markdown formatting, no extra text, no explanations outside the JSON structure.
+          
+          Return your response in this exact JSON format (ensure all quotes, commas, and braces are properly placed):
           {
             "enhancedItems": [
               {
                 "name": "Item Name",
                 "quantity": 2,
                 "unit": "cups",
-                "category": "Produce/Pantry/Frozen/Dairy/Bakery/Refrigerated/Other",
-                "priority": "high/medium/low"
+                "category": "Produce",
+                "priority": "high",
+                "notes": "Optional cooking note"
               }
             ],
             "tips": ["Helpful tip 1", "Helpful tip 2"],
             "budgetNotes": "Budget optimization suggestions"
           }
           
+          JSON VALIDATION RULES:
+          - Every property name must be in double quotes
+          - Every string value must be in double quotes
+          - Use commas to separate array items and object properties
+          - No trailing commas
+          - Ensure all opening braces/brackets have matching closing ones
+          - Test your JSON before responding
+          
           Ensure all quantities are reasonable numbers and units are standard cooking measurements.`;
 
+          console.log('🤖 Sending prompt to Gemini AI...');
           const response = await geminiAI.model.generateContent(prompt);
           const text = response.response.text();
           
-          console.log('🤖 AI Response:', text);
+          console.log('🤖 AI Response received:', text.substring(0, 500) + '...');
+          console.log('🤖 Full AI Response length:', text.length);
           
           // Try multiple JSON parsing strategies
           let aiData = null;
           let parseSuccess = false;
 
-          // Strategy 1: Try to find complete JSON object
-          if (text.includes('{') && text.includes('}')) {
+          // Strategy 1: Try to extract JSON from markdown code blocks first
+          const markdownJsonMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+          if (markdownJsonMatch) {
+            try {
+              const jsonText = markdownJsonMatch[1];
+              aiData = JSON.parse(jsonText);
+              parseSuccess = true;
+              console.log('✅ JSON parsed successfully with strategy 1 (markdown extraction)');
+            } catch (e) {
+              console.log('❌ Strategy 1 (markdown) failed:', e);
+            }
+          }
+
+          // Strategy 2: Try to find complete JSON object (if no markdown wrapper)
+          if (!parseSuccess && text.includes('{') && text.includes('}')) {
             const startBrace = text.indexOf('{');
             const endBrace = text.lastIndexOf('}');
             if (startBrace !== -1 && endBrace !== -1) {
@@ -356,14 +401,14 @@ export const ShoppingListModal: React.FC<ShoppingListModalProps> = ({
                 const jsonText = text.substring(startBrace, endBrace + 1);
                 aiData = JSON.parse(jsonText);
                 parseSuccess = true;
-                console.log('✅ JSON parsed successfully with strategy 1 (complete object)');
+                console.log('✅ JSON parsed successfully with strategy 2 (complete object)');
               } catch (e) {
-                console.log('❌ Strategy 1 failed:', e);
+                console.log('❌ Strategy 2 failed:', e);
               }
             }
           }
 
-          // Strategy 2: Try to extract just the enhancedItems array if the main JSON is malformed
+          // Strategy 3: Try to extract just the enhancedItems array if the main JSON is malformed
           if (!parseSuccess) {
             const startBracket = text.indexOf('[');
             const endBracket = text.lastIndexOf(']');
@@ -380,14 +425,14 @@ export const ShoppingListModal: React.FC<ShoppingListModalProps> = ({
                   budgetNotes: "AI enhancement completed with partial data"
                 };
                 parseSuccess = true;
-                console.log('✅ JSON parsed successfully with strategy 2 (array extraction)');
+                console.log('✅ JSON parsed successfully with strategy 3 (array extraction)');
               } catch (e) {
-                console.log('❌ Strategy 2 failed:', e);
+                console.log('❌ Strategy 3 failed:', e);
               }
             }
           }
 
-          // Strategy 3: Try to manually parse the response if JSON is completely broken
+          // Strategy 4: Try to manually parse the response if JSON is completely broken
           if (!parseSuccess) {
             try {
               // Use simple string operations instead of regex
@@ -426,10 +471,124 @@ export const ShoppingListModal: React.FC<ShoppingListModalProps> = ({
                   budgetNotes: "AI enhancement completed with pattern matching"
                 };
                 parseSuccess = true;
-                console.log('✅ JSON parsed successfully with strategy 3 (string parsing)');
+                console.log('✅ JSON parsed successfully with strategy 4 (string parsing)');
               }
             } catch (e) {
-              console.log('❌ Strategy 3 failed:', e);
+              console.log('❌ Strategy 4 failed:', e);
+            }
+          }
+
+          // Strategy 5: Try to repair common JSON syntax errors
+          if (!parseSuccess) {
+            try {
+              console.log('🔧 Attempting JSON repair...');
+              
+              // Find the JSON content (remove markdown if present)
+              let jsonContent = text;
+              if (text.includes('```json')) {
+                const start = text.indexOf('```json') + 7;
+                const end = text.lastIndexOf('```');
+                if (end > start) {
+                  jsonContent = text.substring(start, end).trim();
+                }
+              } else if (text.includes('```')) {
+                const start = text.indexOf('```') + 3;
+                const end = text.lastIndexOf('```');
+                if (end > start) {
+                  jsonContent = text.substring(start, end).trim();
+                }
+              }
+              
+              // Common JSON repair patterns
+              let repairedJson = jsonContent
+                // Fix missing commas between array items
+                .replace(/"\s*}\s*"/g, '",\n    "')
+                .replace(/"\s*]\s*"/g, '",\n  "')
+                // Fix missing commas between object properties
+                .replace(/"\s*}\s*"/g, '",\n    "')
+                .replace(/"\s*}\s*"/g, '",\n  "')
+                // Fix trailing commas
+                .replace(/,(\s*[}\]])/g, '$1')
+                // Fix missing quotes around property names
+                .replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":')
+                // Fix missing quotes around string values
+                .replace(/:\s*([a-zA-Z][a-zA-Z0-9\s]*[a-zA-Z0-9])\s*([,}])/g, ': "$1"$2')
+                // Fix common syntax errors
+                .replace(/,\s*}/g, '}')
+                .replace(/,\s*]/g, ']');
+              
+              console.log('🔧 Repaired JSON preview:', repairedJson.substring(0, 200) + '...');
+              
+              try {
+                const parsedData = JSON.parse(repairedJson);
+                aiData = parsedData;
+                parseSuccess = true;
+                console.log('✅ JSON parsed successfully with strategy 5 (JSON repair)');
+              } catch (repairError) {
+                console.log('❌ JSON repair failed:', repairError);
+                
+                // Try to extract just the enhancedItems array if the main JSON is still broken
+                const enhancedItemsMatch = repairedJson.match(/"enhancedItems"\s*:\s*\[([\s\S]*?)\]/);
+                if (enhancedItemsMatch) {
+                  try {
+                    const arrayContent = enhancedItemsMatch[1];
+                    // Clean up the array content
+                    const cleanArray = arrayContent
+                      .replace(/,\s*}/g, '}')
+                      .replace(/,\s*]/g, ']')
+                      .replace(/}\s*,\s*$/g, '}');
+                    
+                    const enhancedItems = JSON.parse(`[${cleanArray}]`);
+                    
+                    aiData = {
+                      enhancedItems: enhancedItems,
+                      tips: ['AI enhancement completed with partial JSON repair'],
+                      budgetNotes: "AI enhancement completed with partial JSON repair"
+                    };
+                    parseSuccess = true;
+                    console.log('✅ JSON parsed successfully with strategy 5b (partial repair)');
+                  } catch (arrayError) {
+                    console.log('❌ Array extraction failed:', arrayError);
+                  }
+                }
+              }
+            } catch (e) {
+              console.log('❌ Strategy 5 failed:', e);
+            }
+          }
+
+          // Strategy 6: Try to extract and parse individual items from the broken JSON
+          if (!parseSuccess) {
+            try {
+              console.log('🔧 Attempting item-by-item extraction...');
+              
+              // Look for individual item patterns in the text
+              const itemPattern = /"name"\s*:\s*"([^"]+)"[^}]*"quantity"\s*:\s*(\d+)[^}]*"unit"\s*:\s*"([^"]+)"/g;
+              const items = [];
+              let match;
+              
+              while ((match = itemPattern.exec(text)) !== null) {
+                items.push({
+                  name: match[1],
+                  quantity: parseInt(match[2]) || 1,
+                  unit: match[3],
+                  category: 'Other',
+                  notes: 'AI Enhanced (extracted)',
+                  priority: 'medium'
+                });
+              }
+              
+              if (items.length > 0) {
+                aiData = {
+                  enhancedItems: items,
+                  tips: ['AI enhancement completed with item extraction'],
+                  budgetNotes: "AI enhancement completed with item extraction"
+                };
+                parseSuccess = true;
+                console.log('✅ JSON parsed successfully with strategy 6 (item extraction):', items.length, 'items');
+              }
+            } catch (e) {
+              console.log('❌ Strategy 6 failed:', e);
             }
           }
 
@@ -461,14 +620,38 @@ export const ShoppingListModal: React.FC<ShoppingListModalProps> = ({
             }
           } else {
             console.log('❌ All AI parsing strategies failed');
-            toast({
-              title: "⚠️ AI Enhancement Failed",
-              description: "Generated basic shopping list. AI enhancement could not be completed.",
-              variant: "destructive"
+            console.log('🔍 Debug info:', {
+              responseLength: text.length,
+              responsePreview: text.substring(0, 200),
+              hasCustomFoodItems,
+              customFoodItems: basicShoppingList.filter(item => item.notes === 'Custom food item - will be enhanced by AI').map(item => item.name)
             });
+            
+            // If AI fails, do not show the basic list as a fallback.
+            // Instead, clear the AI generated list and show an appropriate message.
+            setAiGeneratedList([]); // Clear the AI generated list
+            if (hasCustomFoodItems) {
+              toast({
+                title: "❌ AI Enhancement Failed",
+                description: "Could not generate an AI-enhanced shopping list. Custom food items require manual breakdown.",
+                variant: "destructive"
+              });
+            } else {
+              toast({
+                title: "❌ AI Enhancement Failed",
+                description: "Could not generate an AI-enhanced shopping list. AI service might be overloaded or unavailable.",
+                variant: "destructive"
+              });
+            }
           }
         } catch (error) {
           console.log('🤖 AI shopping list generation failed:', error);
+          console.log('🔍 Error details:', {
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+            hasCustomFoodItems,
+            customFoodItems: basicShoppingList.filter(item => item.notes === 'Custom food item - will be enhanced by AI').map(item => item.name)
+          });
           
           // Handle specific AI service errors
           let errorMessage = "Generated basic shopping list. AI enhancement encountered an error.";
@@ -499,6 +682,11 @@ export const ShoppingListModal: React.FC<ShoppingListModalProps> = ({
             }
           }
           
+          // If we have custom food items, make sure they're still visible
+          if (hasCustomFoodItems) {
+            errorMessage += " Custom food items need manual ingredient breakdown.";
+          }
+          
           toast({
             title: errorTitle,
             description: errorMessage,
@@ -506,10 +694,18 @@ export const ShoppingListModal: React.FC<ShoppingListModalProps> = ({
           });
         }
       } else {
-        toast({
-          title: "ℹ️ AI Not Configured",
-          description: "Generated basic shopping list. Configure Gemini AI for enhanced features.",
-        });
+        console.log('ℹ️ Gemini AI not configured, skipping AI enhancement');
+        if (customFoodItems.length > 0) {
+          toast({
+            title: "ℹ️ AI Not Configured",
+            description: `Generated basic shopping list with ${customFoodItems.length} custom food items. Configure Gemini AI for ingredient breakdown.`,
+          });
+        } else {
+          toast({
+            title: "ℹ️ AI Not Configured",
+            description: "Generated basic shopping list. Configure Gemini AI for enhanced features.",
+          });
+        }
       }
     } catch (error) {
       console.log('❌ Shopping list generation failed:', error);
@@ -563,9 +759,17 @@ export const ShoppingListModal: React.FC<ShoppingListModalProps> = ({
       setCustomFoodInput(''); // Clear custom food input when modal opens
       setSelectedDays(new Set(weekDays)); // Initialize with current week days
       
+      // Prevent background scrolling when modal is open
+      document.body.style.overflow = 'hidden';
+      
       // Test recipe matching
       testRecipeMatching();
     }
+    
+    // Cleanup function to restore scrolling when modal closes
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
   }, [isOpen, weekDays]);
 
   if (!isOpen) return null;
@@ -582,9 +786,9 @@ export const ShoppingListModal: React.FC<ShoppingListModalProps> = ({
           initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
-          className="w-full max-w-4xl h-[90vh]"
+          className="w-full max-w-7xl h-[90vh] max-h-[90vh] overflow-hidden"
         >
-          <Card className="shadow-2xl border-border/50 h-full flex flex-col">
+          <Card className="shadow-2xl border-border/50 h-full flex flex-col overflow-hidden">
             <CardHeader className="flex-shrink-0">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-xl flex items-center gap-2">
@@ -602,415 +806,273 @@ export const ShoppingListModal: React.FC<ShoppingListModalProps> = ({
               </div>
               <p className="text-sm text-muted-foreground">
                 Generate an AI-enhanced shopping list from your planned meals for {weekStart.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })} - {new Date(weekStart.getTime() + 6 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                {geminiAI.isConfigured() && (
-                  <span className="block mt-1 text-xs">
-                    🤖 AI enhancement available • Basic list always generated as fallback
-                  </span>
-                )}
               </p>
             </CardHeader>
 
-            <CardContent className="flex-1 overflow-hidden flex flex-col gap-6">
-              <>
-                {/* Custom Recipe Input Section */}
-                <div className="space-y-4 p-4 bg-muted/20 rounded-lg border">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Sparkles className="w-4 h-4 text-blue-600" />
-                    <h3 className="font-medium">Add Custom Food Items</h3>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Type in any food you want to add to your shopping list. We'll find the ingredients for you.
-                  </p>
-                  
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="e.g., Tofu Scramble, Lentil Curry, Chia Pudding..."
-                      className="flex-1 px-3 py-2 border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
-                      value={customFoodInput}
-                      onChange={(e) => setCustomFoodInput(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && addCustomFood()}
-                    />
-                    <Button
-                      onClick={addCustomFood}
-                      disabled={!customFoodInput.trim()}
-                      size="sm"
-                      className="gap-2"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Add
-                    </Button>
-                  </div>
-                  
-                  {/* Custom Food Items List */}
-                  {customFoodItems.length > 0 && (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-medium text-muted-foreground">Custom Items Added:</h4>
+            <CardContent className="flex-1 overflow-hidden p-0">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-full p-6">
+                {/* Left Container - Form */}
+                <Card className="border-2 border-border/30 bg-card/50">
+                  <CardContent className="p-6 space-y-6 overflow-y-auto h-full">
+                    {/* Custom Recipe Input Section */}
+                    <div className="space-y-4 p-4 bg-muted/20 rounded-lg border">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Sparkles className="w-4 h-4 text-blue-600" />
+                        <h3 className="font-medium">Add Custom Food Items</h3>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Type in any food you want to add to your shopping list. We'll find the ingredients for you.
+                      </p>
+                      
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="e.g., Tofu Scramble, Lentil Curry, Chia Pudding..."
+                          className="flex-1 px-3 py-2 border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                          value={customFoodInput}
+                          onChange={(e) => setCustomFoodInput(e.target.value)}
+                          onKeyPress={(e) => e.key === 'Enter' && addCustomFood()}
+                        />
                         <Button
-                          onClick={() => setCustomFoodItems([])}
-                          variant="ghost"
+                          onClick={addCustomFood}
+                          disabled={!customFoodInput.trim()}
                           size="sm"
-                          className="text-xs text-muted-foreground hover:text-foreground"
+                          className="gap-2"
                         >
-                          Clear All
+                          <Plus className="w-4 h-4" />
+                          Add
                         </Button>
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        {customFoodItems.map((item, index) => (
-                          <div
-                            key={index}
-                            className="flex items-center gap-2 px-3 py-1 bg-blue-100 border border-blue-200 rounded-full text-sm"
-                          >
-                            <span className="text-blue-800">{item}</span>
+                      
+                      {/* Custom Food Items List */}
+                      {customFoodItems.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-sm font-medium text-muted-foreground">Custom Items Added:</h4>
                             <Button
-                              onClick={() => removeCustomFood(index)}
+                              onClick={() => setCustomFoodItems([])}
                               variant="ghost"
                               size="sm"
-                              className="h-5 w-5 p-0 hover:bg-blue-200"
+                              className="text-xs text-muted-foreground hover:text-foreground"
                             >
-                              <X className="w-3 h-3" />
+                              Clear All
                             </Button>
                           </div>
-                        ))}
+                          <div className="flex flex-wrap gap-2">
+                            {customFoodItems.map((item, index) => (
+                              <div
+                                key={index}
+                                className="flex items-center gap-2 px-3 py-1 bg-blue-100 border border-blue-200 rounded-full text-sm"
+                              >
+                                <span className="text-blue-800">{item}</span>
+                                <Button
+                                  onClick={() => removeCustomFood(index)}
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-5 w-5 p-0 hover:bg-blue-200"
+                                >
+                                  <X className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Helpful Suggestions */}
+                      <div className="text-xs text-muted-foreground">
+                        <p className="mb-1">💡 <strong>Popular suggestions:</strong></p>
+                        <div className="flex flex-wrap gap-1">
+                          {['Tofu Scramble', 'Lentil Curry', 'Chia Pudding', 'Hummus', 'Quinoa Bowl', 'Smoothie Bowl'].map((suggestion) => (
+                            <button
+                              key={suggestion}
+                              onClick={() => {
+                                if (!customFoodItems.includes(suggestion)) {
+                                  setCustomFoodItems([...customFoodItems, suggestion]);
+                                }
+                              }}
+                              className="px-2 py-1 bg-muted/50 hover:bg-muted rounded text-xs transition-colors"
+                              disabled={customFoodItems.includes(suggestion)}
+                            >
+                              {suggestion}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
-                  )}
 
-                  {/* Helpful Suggestions */}
-                  <div className="text-xs text-muted-foreground">
-                    <p className="mb-1">💡 <strong>Popular suggestions:</strong></p>
-                    <div className="flex flex-wrap gap-1">
-                      {['Tofu Scramble', 'Lentil Curry', 'Chia Pudding', 'Hummus', 'Quinoa Bowl', 'Smoothie Bowl'].map((suggestion) => (
-                        <button
-                          key={suggestion}
-                          onClick={() => {
-                            if (!customFoodItems.includes(suggestion)) {
-                              setCustomFoodItems([...customFoodItems, suggestion]);
-                            }
-                          }}
-                          className="px-2 py-1 bg-muted/50 hover:bg-muted rounded text-xs transition-colors"
-                          disabled={customFoodItems.includes(suggestion)}
-                        >
-                          {suggestion}
-                        </button>
-                      ))}
+                    {/* Configuration Section */}
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="font-medium mb-3">Include Meal Types</h3>
+                        <div className="flex flex-wrap gap-2">
+                          {mealTypes.map(mealType => (
+                            <Button
+                              key={mealType}
+                              variant={selectedMealTypes.has(mealType) ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => toggleMealType(mealType)}
+                              className="text-xs"
+                            >
+                              {mealType}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <h3 className="font-medium mb-3">Include Days</h3>
+                        <div className="flex flex-wrap gap-2">
+                          {weekDays.map(day => (
+                            <Button
+                              key={day}
+                              variant={selectedDays.has(day) ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => toggleDay(day)}
+                              className="text-xs"
+                            >
+                              {day}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <Button
+                        onClick={generateShoppingList}
+                        disabled={isGenerating || selectedMealTypes.size === 0 || selectedDays.size === 0}
+                        className="w-full"
+                      >
+                        {isGenerating ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Generating AI Shopping List...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4 mr-2" />
+                            Generate AI Shopping List
+                          </>
+                        )}
+                      </Button>
                     </div>
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
 
-                {/* Configuration Section */}
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="font-medium mb-3">Include Meal Types</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {mealTypes.map(mealType => (
-                        <Button
-                          key={mealType}
-                          variant={selectedMealTypes.has(mealType) ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => toggleMealType(mealType)}
-                          className="text-xs"
-                        >
-                          {mealType}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="font-medium mb-3">Include Days</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {weekDays.map(day => (
-                        <Button
-                          key={day}
-                          variant={selectedDays.has(day) ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => toggleDay(day)}
-                          className="text-xs"
-                        >
-                          {day}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <Button
-                    onClick={generateShoppingList}
-                    disabled={isGenerating || selectedMealTypes.size === 0 || selectedDays.size === 0}
-                    className="w-full"
-                  >
-                    {isGenerating ? (
+                {/* Right Container - AI Shopping List Preview */}
+                <Card className="border-2 border-border/30 bg-card/50 flex flex-col h-full">
+                  <CardContent className="flex-1 flex flex-col min-h-0">
+                    {aiGeneratedList.length > 0 ? (
                       <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Generating AI Shopping List...
+                        <div className="flex items-center justify-between flex-shrink-0 mb-4 px-6 pt-6">
+                          <h3 className="font-medium">AI Shopping List Preview</h3>
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={() => setAiGeneratedList([])}
+                              size="sm"
+                              variant="outline"
+                              className="gap-2"
+                              title="Clear AI Enhanced List"
+                            >
+                              <X className="w-4 h-4" />
+                              Clear AI List
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto space-y-4 px-6 pb-6" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <Sparkles className="w-4 h-4 text-blue-600" />
+                              <h4 className="font-medium text-sm text-blue-600 uppercase tracking-wide">
+                                AI Enhanced Shopping List
+                              </h4>
+                              <Badge variant="secondary" className="text-xs">Optimized</Badge>
+                            </div>
+                            {categories.map(category => {
+                              const categoryItems = aiGeneratedList.filter(item => item.category === category);
+                              if (categoryItems.length === 0) return null;
+
+                              return (
+                                <div key={`ai-${category}`} className="space-y-2">
+                                  <h5 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
+                                    {category}
+                                  </h5>
+                                  <div className="space-y-2">
+                                    {categoryItems.map((item, index) => (
+                                      <div
+                                        key={`ai-${index}`}
+                                        className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg"
+                                      >
+                                        <div className="flex-1">
+                                          <div className="font-medium">{item.name}</div>
+                                          <div className="text-sm text-muted-foreground">
+                                            {item.quantity} {item.unit}
+                                          </div>
+                                          <div className="text-xs text-muted-foreground mt-1">
+                                            Used in: {item.recipes.join(', ')}
+                                          </div>
+                                          {item.notes && (
+                                            <div className="text-xs text-blue-600 mt-1">
+                                              💡 {item.notes}
+                                            </div>
+                                          )}
+                                        </div>
+                                        <Checkbox />
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          
+                          {/* Download Section - Only show when AI content exists */}
+                          <div className="space-y-3 pt-4 border-t border-border/30">
+                            <h4 className="font-medium text-sm text-muted-foreground">Download AI Shopping List</h4>
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={() => downloadAsTXT(aiGeneratedList)}
+                                variant="outline"
+                                className="flex-1 gap-2"
+                                title="Download as Text File - Simple, readable format"
+                              >
+                                <Download className="w-4 h-4" />
+                                Download as Text
+                              </Button>
+                              <Button
+                                onClick={() => downloadAsCSV(aiGeneratedList)}
+                                variant="outline"
+                                className="flex-1 gap-2"
+                                title="Download as CSV File - For spreadsheet applications"
+                              >
+                                <Download className="w-4 h-4" />
+                                Download as CSV
+                              </Button>
+                              <Button
+                                onClick={() => downloadAsPDF(aiGeneratedList)}
+                                variant="outline"
+                                className="flex-1 gap-2"
+                                title="Download as HTML - Print-friendly format"
+                              >
+                                <Download className="w-4 h-4" />
+                                Download as HTML
+                              </Button>
+                            </div>
+                            <p className="text-xs text-muted-foreground text-center">
+                              Download your AI-enhanced shopping list in multiple formats
+                            </p>
+                          </div>
+                        </div>
                       </>
                     ) : (
-                      <>
-                        <Sparkles className="w-4 h-4 mr-2" />
-                        Generate AI Shopping List
-                      </>
-                    )}
-                  </Button>
-                </div>
-
-                {/* AI Shopping List Preview */}
-                {aiGeneratedList.length > 0 && (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-medium">AI Shopping List Preview</h3>
-                      <div className="flex gap-2">
-                        <Button
-                          onClick={() => setAiGeneratedList([])}
-                          size="sm"
-                          variant="outline"
-                          className="gap-2"
-                          title="Clear AI Enhanced List"
-                        >
-                          <X className="w-4 h-4" />
-                          Clear AI List
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="max-h-96 overflow-y-auto space-y-4">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Sparkles className="w-4 h-4 text-blue-600" />
-                          <h4 className="font-medium text-sm text-blue-600 uppercase tracking-wide">
-                            AI Enhanced Shopping List
-                          </h4>
-                          <Badge variant="secondary" className="text-xs">Optimized</Badge>
-                        </div>
-                        {categories.map(category => {
-                          const categoryItems = aiGeneratedList.filter(item => item.category === category);
-                          if (categoryItems.length === 0) return null;
-
-                          return (
-                            <div key={`ai-${category}`} className="space-y-2">
-                              <h5 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
-                                {category}
-                              </h5>
-                              <div className="space-y-2">
-                                {categoryItems.map((item, index) => (
-                                  <div
-                                    key={`ai-${index}`}
-                                    className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg"
-                                  >
-                                    <div className="flex-1">
-                                      <div className="font-medium">{item.name}</div>
-                                      <div className="text-sm text-muted-foreground">
-                                        {item.quantity} {item.unit}
-                                      </div>
-                                      <div className="text-xs text-muted-foreground mt-1">
-                                        Used in: {item.recipes.join(', ')}
-                                      </div>
-                                      {item.notes && (
-                                        <div className="text-xs text-blue-600 mt-1">
-                                          💡 {item.notes}
-                                        </div>
-                                      )}
-                                    </div>
-                                    <Checkbox />
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    
-                    {/* Download Section - Only show when AI content exists */}
-                    <div className="space-y-3">
-                      <h4 className="font-medium text-sm text-muted-foreground">Download AI Shopping List</h4>
-                      <div className="flex gap-2">
-                        <Button
-                          onClick={() => downloadAsTXT(aiGeneratedList)}
-                          variant="outline"
-                          className="flex-1 gap-2"
-                          title="Download as Text File - Simple, readable format"
-                        >
-                          <Download className="w-4 h-4" />
-                          Download as Text
-                        </Button>
-                        <Button
-                          onClick={() => downloadAsCSV(aiGeneratedList)}
-                          variant="outline"
-                          className="flex-1 gap-2"
-                          title="Download as CSV File - For spreadsheet applications"
-                        >
-                          <Download className="w-4 h-4" />
-                          Download as CSV
-                        </Button>
-                        <Button
-                          onClick={() => downloadAsPDF(aiGeneratedList)}
-                          variant="outline"
-                          className="flex-1 gap-2"
-                          title="Download as HTML - Print-friendly format"
-                        >
-                          <Download className="w-4 h-4" />
-                          Download as HTML
-                        </Button>
-                      </div>
-                      <p className="text-xs text-muted-foreground text-center">
-                        Download your AI-enhanced shopping list in multiple formats
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {aiGeneratedList.length === 0 && !isGenerating && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Sparkles className="w-16 h-16 mx-auto mb-4 opacity-20" />
-                    <p>Click "Generate AI Shopping List" to create an optimized shopping list from your meal plan</p>
-                    
-                    {/* Show basic shopping list if available */}
-                    {shoppingList.length > 0 && (
-                      <div className="mt-6 p-4 bg-muted/20 rounded-lg border">
-                        <h4 className="font-medium mb-2">📋 Basic Shopping List Available</h4>
-                        <p className="text-sm mb-3">
-                          Your basic shopping list has been generated from your meal plan. 
-                          {geminiAI.isConfigured() && (
-                            <span className="block mt-1">
-                              AI enhancement is available when the service is not overloaded.
-                            </span>
-                          )}
-                        </p>
-                        <div className="flex gap-2 justify-center">
-                          <Button
-                            onClick={() => downloadAsTXT(shoppingList)}
-                            variant="outline"
-                            size="sm"
-                            className="gap-1"
-                            title="Download AI Enhanced List as CSV"
-                          >
-                            <Download className="w-3 h-3" />
-                            CSV
-                          </Button>
-                          <Button
-                            onClick={() => {
-                              let txtContent = `SHOPPING LIST\n`;
-                              txtContent += `${weekStart.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })} - ${new Date(weekStart.getTime() + 6 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}\n`;
-                              txtContent += `Generated on: ${new Date().toLocaleDateString()}\n\n`;
-                              txtContent += `AI Enhanced Shopping List\n`;
-                              txtContent += `${'='.repeat(15)}\n`;
-                              aiGeneratedList.forEach(item => {
-                                txtContent += `☐ ${item.name} - ${item.quantity} ${item.unit}\n`;
-                                if (item.recipes.length > 0) {
-                                  txtContent += `   Used in: ${item.recipes.join(', ')}\n`;
-                                }
-                                if (item.notes) {
-                                  txtContent += `   Note: ${item.notes}\n`;
-                                }
-                                txtContent += '\n';
-                              });
-                              const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8' });
-                              const link = document.createElement('a');
-                              const url = URL.createObjectURL(blob);
-                              link.setAttribute('href', url);
-                              link.setAttribute('download', `ai-enhanced-shopping-list-${weekStart.toISOString().split('T')[0]}.txt`);
-                              link.style.visibility = 'hidden';
-                              document.body.appendChild(link);
-                              link.click();
-                              document.body.removeChild(link);
-                            }}
-                            variant="outline"
-                            size="sm"
-                            className="gap-1"
-                            title="Download AI Enhanced List as TXT"
-                          >
-                            <Download className="w-3 h-3" />
-                            TXT
-                          </Button>
-                          <Button
-                            onClick={() => {
-                              let htmlContent = `
-                                <!DOCTYPE html>
-                                <html>
-                                <head>
-                                  <title>Shopping List</title>
-                                  <style>
-                                    body { font-family: Arial, sans-serif; margin: 20px; }
-                                    .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 10px; }
-                                    .category { margin-bottom: 25px; }
-                                    .category-title { font-size: 18px; font-weight: bold; margin-bottom: 15px; color: #333; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
-                                    .item { margin-bottom: 10px; padding-left: 20px; }
-                                    .item-name { font-weight: bold; }
-                                    .item-details { color: #666; font-size: 14px; margin-left: 20px; }
-                                    .checkbox { display: inline-block; width: 20px; height: 20px; border: 2px solid #333; margin-right: 10px; }
-                                    @media print { .no-print { display: none; } }
-                                  </style>
-                                </head>
-                                <body>
-                                  <div class="header">
-                                    <h1>SHOPPING LIST</h1>
-                                    <p>${weekStart.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })} - ${new Date(weekStart.getTime() + 6 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
-                                    <p>Generated on: ${new Date().toLocaleDateString()}</p>
-                                  </div>
-                              `;
-                              htmlContent += `
-                                <div class="category">
-                                  <div class="category-title">AI Enhanced Shopping List</div>
-                              `;
-                              aiGeneratedList.forEach(item => {
-                                htmlContent += `
-                                  <div class="item">
-                                    <span class="checkbox"></span>
-                                    <span class="item-name">${item.name}</span> - ${item.quantity} ${item.unit}
-                                    <div class="item-details">
-                                      Used in: ${item.recipes.join(', ')}
-                                      ${item.notes ? ` | Note: ${item.notes}` : ''}
-                                    </div>
-                                  </div>
-                                `;
-                              });
-                              htmlContent += `
-                                </div>
-                              `;
-                              htmlContent += `
-                                <div class="no-print" style="margin-top: 30px; text-align: center;">
-                                  <p>Print this page to save as PDF or take with you shopping!</p>
-                                </div>
-                              </body>
-                              </html>
-                            `;
-                              const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
-                              const url = URL.createObjectURL(blob);
-                              const link = document.createElement('a');
-                              link.setAttribute('href', url);
-                              link.setAttribute('download', `ai-enhanced-shopping-list-${weekStart.toISOString().split('T')[0]}.html`);
-                              link.style.visibility = 'hidden';
-                              document.body.appendChild(link);
-                              link.click();
-                              document.body.removeChild(link);
-                            }}
-                            variant="outline"
-                            size="sm"
-                            className="gap-1"
-                            title="Download AI Enhanced List as HTML"
-
-                          >
-                            <Download className="w-4 h-4" />
-                            Download Basic List
-                          </Button>
-                          {geminiAI.isConfigured() && (
-                            <Button
-                              onClick={generateShoppingList}
-                              variant="outline"
-                              size="sm"
-                              className="gap-2"
-                            >
-                              <Sparkles className="w-4 h-4" />
-                              Retry AI Enhancement
-                            </Button>
-                          )}
-                        </div>
+                      <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground px-6 py-6">
+                        <Sparkles className="w-16 h-16 mb-4 opacity-20" />
+                        <p className="text-center">Click "Generate AI Shopping List" to create an optimized shopping list from your meal plan</p>
                       </div>
                     )}
-                  </div>
-                )}
-              </>
+                  </CardContent>
+                </Card>
+              </div>
             </CardContent>
           </Card>
         </motion.div>

@@ -198,6 +198,9 @@ export const useMealPlannerStore = create<MealPlannerStore>()(
       },
 
       resetWeek: () => {
+        // Save current week's meals before clearing
+        const currentWeekStart = parseISO(get().weekStartISO);
+        get().saveWeekMeals(currentWeekStart);
         set({ items: [], selectedItemId: null });
       },
 

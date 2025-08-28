@@ -4,6 +4,7 @@ import { Scan, ChefHat, MapPin, ArrowRight, Leaf, ChevronDown } from 'lucide-rea
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import FeaturePreviewHover from '@/components/FeaturePreviewHover';
+import AnimatedTicker from '@/components/ui/animated-ticker';
 import { useSlideTransition } from '@/hooks/useSlideTransition';
 import { useScrollAnimation } from '@/hooks/useScrollAnimation';
 import { cn } from '@/lib/utils';
@@ -69,7 +70,7 @@ const Index = () => {
                 </span>
               </div>
               
-              <h1 className="text-4xl lg:text-6xl font-bold text-foreground mb-6 leading-tight">
+              <h1 className="text-4xl font-bold text-foreground mb-6 leading-tight">
                 Your Smart
                 <span className="text-emerald-400 font-extrabold"> Vegan </span>
                 Companion
@@ -96,6 +97,11 @@ const Index = () => {
                     Browse Recipes
                   </Button>
                 </Link>
+              </div>
+              
+              {/* Animated Ticker */}
+              <div className="mt-8">
+                <AnimatedTicker />
               </div>
             </div>
             
@@ -125,8 +131,8 @@ const Index = () => {
             "text-center mb-16 transition-all duration-1000 ease-out pt-64",
             featuresAnimated ? "opacity-100 translate-y-0" : "opacity-0 translate-y-12"
           )}>
-            <h2 className="text-3xl lg:text-4xl font-bold text-foreground mb-4">
-              Everything You Need for Vegan Living
+            <h2 className="text-3xl font-bold text-foreground mb-4">
+              Why Choose Kaizo?
             </h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
               Three powerful tools to help you navigate your plant-based journey with confidence
@@ -178,7 +184,7 @@ const Index = () => {
       <section className="py-16 lg:py-24 bg-gradient-card" ref={ctaRef}>
         <div className="container mx-auto px-4 text-center">
           <div className="max-w-3xl mx-auto">
-            <h2 className="text-3xl lg:text-4xl font-bold text-foreground mb-4">
+            <h2 className="text-3xl font-bold text-foreground mb-4">
               <span className={cn(
                 "inline-block transition-all duration-300 ease-out",
                 ctaVisible && "animate-letter-bounce"
