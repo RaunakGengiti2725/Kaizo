@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/AuthContext';
+import { useDietMode } from '@/contexts/DietModeContext';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { AnimatedText } from '@/components/ui/animated-text';
 
@@ -13,6 +16,7 @@ const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
   const { user, signOut } = useAuth();
+  const { mode, setMode } = useDietMode();
 
   const navItems = [
     { href: '/scan', label: 'Scan', icon: Scan },
@@ -93,6 +97,16 @@ const Navigation = () => {
                       </p>
                     </div>
                   </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {/* Diet Mode Toggle in profile menu */}
+                  <div className="px-3 py-2">
+                    <p className="text-xs text-muted-foreground mb-1">Diet mode</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs">Vegetarian</span>
+                      <Switch id="diet-mode-menu" checked={mode === 'vegan'} onCheckedChange={(checked) => setMode(checked ? 'vegan' : 'vegetarian')} />
+                      <span className="text-xs">Vegan</span>
+                    </div>
+                  </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => signOut()}>
                     <LogOut className="mr-2 h-4 w-4" />

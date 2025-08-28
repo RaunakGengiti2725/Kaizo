@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, X, CheckCircle, AlertTriangle, Leaf, Carrot, TreePine } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { lookupProductByBarcode } from '@/services/productLookup';
+import { checkVeganStatusWithAI, type VeganCheckResult } from '@/utils/veganChecker';
+import { useDietMode } from '@/contexts/DietModeContext';
 
 interface VeganResult {
   isVegan: boolean;
@@ -22,6 +24,7 @@ interface VeganResult {
 }
 
 const Scan = () => {
+  const { mode } = useDietMode();
   const [activeTab, setActiveTab] = useState<'barcode'>('barcode');
   const [barcode, setBarcode] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -30,6 +33,7 @@ const Scan = () => {
   const [productName, setProductName] = useState<string>('');
   const [brandName, setBrandName] = useState<string>('');
   const [dietClass, setDietClass] = useState<'vegan' | 'vegetarian' | 'neither'>('vegan');
+  const [analysis, setAnalysis] = useState<VeganCheckResult | null>(null);
   
   const barcodeScannerRef = useRef<BarcodeScannerRef | null>(null);
 
@@ -46,18 +50,20 @@ const Scan = () => {
       
       if (productData) {
         setProductName(productData.productName || 'Unknown Product');
-        setBrandName(productData.brandName || 'Unknown Brand');
+        setBrandName(productData.brand || 'Unknown Brand');
         
-        // Analyze ingredients with Gemini AI
+        // Analyze ingredients with Gemini AI / detailed pipeline
         if (productData.ingredientsText) {
-          const aiAnalysis = await analyzeIngredientsForVegan(productData.ingredientsText);
-          setVeganResult(aiAnalysis);
+          const detailed = await analyzeIngredientsForVegan(productData.ingredientsText);
+          setVeganResult(detailed.summary);
+          setAnalysis(detailed.detail);
         } else {
           setVeganResult({
             isVegan: false,
             confidence: 0,
             reasoning: 'No ingredient information available for this product.'
           });
+          setAnalysis(null);
         }
         
         setShowResultDialog(true);
@@ -80,24 +86,29 @@ const Scan = () => {
     }
   };
 
-  const analyzeIngredientsForVegan = async (ingredientsText: string): Promise<VeganResult> => {
+  const analyzeIngredientsForVegan = async (ingredientsText: string): Promise<{ summary: VeganResult; detail: VeganCheckResult }> => {
     const ingredients = ingredientsText.toLowerCase();
     const problematicIngredients = [];
     const proteinSources = [];
     const allergens = [];
     
-    // Check for non-vegan ingredients
-    if (ingredients.includes('milk') || ingredients.includes('dairy')) {
-      problematicIngredients.push('Dairy products');
+    // Check against selected diet mode
+    const isVegetarianMode = mode === 'vegetarian';
+    // Always non-vegetarian
+    if (ingredients.includes('gelatin') || ingredients.includes('meat') || ingredients.includes('beef') || ingredients.includes('pork') || ingredients.includes('chicken') || ingredients.includes('fish') || ingredients.includes('shellfish')) {
+      problematicIngredients.push('Meat/Fish/Gelatin');
     }
-    if (ingredients.includes('egg') || ingredients.includes('eggs')) {
-      problematicIngredients.push('Eggs');
-    }
-    if (ingredients.includes('honey')) {
-      problematicIngredients.push('Honey');
-    }
-    if (ingredients.includes('gelatin')) {
-      problematicIngredients.push('Gelatin');
+    // Non-vegan but allowed in vegetarian mode
+    if (!isVegetarianMode) {
+      if (ingredients.includes('milk') || ingredients.includes('dairy') || ingredients.includes('casein') || ingredients.includes('whey')) {
+        problematicIngredients.push('Dairy products');
+      }
+      if (ingredients.includes('egg') || ingredients.includes('eggs') || ingredients.includes('albumin')) {
+        problematicIngredients.push('Eggs');
+      }
+      if (ingredients.includes('honey')) {
+        problematicIngredients.push('Honey');
+      }
     }
     
     // Check for protein sources
@@ -119,26 +130,28 @@ const Scan = () => {
       allergens.push('Gluten');
     }
     
-    const isVegan = problematicIngredients.length === 0;
-    const confidence = isVegan ? 0.9 : 0.7;
-    
-    return {
+    // Use full AI analysis for detailed reasoning
+    const ai = await checkVeganStatusWithAI(ingredientsText);
+    const isVegan = ai.result === 'vegan';
+    const confidence = ai.confidence || (isVegan ? 0.9 : 0.7);
+    const summary: VeganResult = {
       isVegan,
       confidence,
-      problematicIngredients,
+      problematicIngredients: ai.detectedIngredients.filter(d => d.category === 'notVegan').map(d => d.ingredient),
       proteinSources,
       allergens,
-      reasoning: isVegan 
-        ? 'No animal-derived ingredients detected.'
-        : `Contains: ${problematicIngredients.join(', ')}`
+      ecoScore: ai.carbonFootprint?.score ? Math.round(ai.carbonFootprint.score / 20) : undefined,
+      reasoning: ai.reasons?.[0]
     };
+    return { summary, detail: ai };
   };
 
   const getDietClass = (result: VeganResult): 'vegan' | 'vegetarian' | 'neither' => {
-    if (result.isVegan) return 'vegan';
-    if (result.problematicIngredients?.some(ing => ing.includes('Dairy') || ing.includes('Egg'))) {
-      return 'vegetarian';
-    }
+    if (result.isVegan) return mode === 'vegetarian' ? 'vegetarian' : 'vegan';
+    // If non-vegan ingredients are only eggs/dairy/honey, classify as vegetarian
+    const low = (result.problematicIngredients || []).join(' ').toLowerCase();
+    const onlyVegetarian = /egg|eggs|milk|dairy|casein|whey|honey/.test(low) && !/meat|beef|pork|chicken|fish|gelatin|shellfish/.test(low);
+    if (onlyVegetarian) return 'vegetarian';
     return 'neither';
   };
 
@@ -174,7 +187,7 @@ const Scan = () => {
     <div className="container mx-auto max-w-5xl px-4 py-8">
       <div className="mb-6">
         <h1 className="text-4xl font-bold text-foreground">Scan Product</h1>
-        <p className="text-muted-foreground">Scan a barcode to determine if an item is vegan, vegetarian, or neither.</p>
+        <p className="text-muted-foreground">Scan a barcode to determine if an item is {mode === 'vegan' ? 'vegan' : 'vegetarian'}-friendly.</p>
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'barcode')}>
@@ -256,7 +269,7 @@ const Scan = () => {
                   {veganResult.isVegan ? '🌱' : dietClass === 'vegetarian' ? '🥬' : '❌'}
                 </div>
                 <h3 className="text-2xl font-bold mb-2">
-                  {veganResult.isVegan ? 'Vegan Safe!' : dietClass === 'vegetarian' ? 'Vegetarian Safe' : 'Not Vegan'}
+                  {mode === 'vegan' ? (veganResult.isVegan ? 'Vegan Safe!' : dietClass === 'vegetarian' ? 'Not Vegan (Vegetarian OK)' : 'Not Vegan') : (veganResult.isVegan ? 'Vegetarian Safe' : 'Not Vegetarian')}
                 </h3>
                 <p className="text-muted-foreground">
                   Confidence: {Math.round((veganResult.confidence || 0) * 100)}%
@@ -269,6 +282,17 @@ const Scan = () => {
               {/* Product Details */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-4">
+                  {/* Confirmed Vegan Ingredients */}
+                  {analysis?.detectedIngredients && analysis.detectedIngredients.some(d => d.category === 'vegan') && (
+                    <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                      <h4 className="font-semibold text-green-800 mb-2">Confirmed Vegan Ingredients</h4>
+                      <ul className="text-sm text-green-800 space-y-1">
+                        {analysis.detectedIngredients.filter(d => d.category === 'vegan').slice(0, 12).map((d, i) => (
+                          <li key={i}>{d.ingredient}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   {/* Problematic Ingredients */}
                   {veganResult.problematicIngredients && veganResult.problematicIngredients.length > 0 && (
                     <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -291,14 +315,46 @@ const Scan = () => {
                   {veganResult.problematicIngredients && veganResult.problematicIngredients.length > 0 && (
                     <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
                       <h4 className="font-semibold text-orange-800 mb-2">Why?</h4>
-                      <p className="text-sm text-orange-700">
-                        These ingredients are derived from animals and are not suitable for vegan diets.
-                      </p>
+                      {analysis?.detectedIngredients && analysis.detectedIngredients.length > 0 ? (
+                        <ul className="list-disc pl-5 space-y-1 text-sm text-orange-800">
+                          {analysis.detectedIngredients
+                            .filter(d => d.category === 'notVegan')
+                            .slice(0, 8)
+                            .map((d, i) => (
+                              <li key={i}>{d.ingredient}{d.explanation ? ` — ${d.explanation}` : ''}</li>
+                            ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-orange-700">
+                          These ingredients are derived from animals and are not suitable for vegan diets.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Key Reasons from AI */}
+                  {analysis?.reasons && analysis.reasons.length > 0 && (
+                    <div className="p-4 bg-muted/40 border border-border rounded-lg">
+                      <h4 className="font-semibold mb-2">Key Reasons</h4>
+                      <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
+                        {analysis.reasons.slice(0, 6).map((r, i) => (<li key={i}>{r}</li>))}
+                      </ul>
                     </div>
                   )}
                 </div>
 
                 <div className="space-y-4">
+                  {/* Unclear Ingredients */}
+                  {analysis?.aiAnalysis?.unclearIngredients && analysis.aiAnalysis.unclearIngredients.length > 0 && (
+                    <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <h4 className="font-semibold text-yellow-800 mb-2">Unclear Ingredients</h4>
+                      <ul className="text-sm text-yellow-800 space-y-1">
+                        {analysis.aiAnalysis.unclearIngredients.slice(0, 8).map((u, i) => (
+                          <li key={i}>{u.ingredient}: {u.reason}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   {/* Protein Sources */}
                   {veganResult.proteinSources && veganResult.proteinSources.length > 0 && (
                     <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
@@ -352,6 +408,11 @@ const Scan = () => {
                   <p className="text-sm text-blue-700 mt-1">
                     {getEcoGrade(veganResult.ecoScore).description}
                   </p>
+                  {analysis?.carbonFootprint?.reasons && (
+                    <ul className="mt-2 text-sm text-blue-800 list-disc pl-5">
+                      {analysis.carbonFootprint.reasons.slice(0, 5).map((r, i) => (<li key={i}>{r}</li>))}
+                    </ul>
+                  )}
                 </div>
               )}
             </div>

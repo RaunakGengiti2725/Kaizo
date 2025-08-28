@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { geminiAI, type GeneratedRecipeCandidate, type GeneratedRecipeDetail } from '@/services/geminiAI';
 import { useAuth } from '@/contexts/AuthContext';
 import ChatWithGemini from '@/components/ChatWithGemini';
+import { useDietMode } from '@/contexts/DietModeContext';
 
 const mealTypes = [
   'Breakfast','Lunch','Dinner','Snacks','Desserts','Drinks/Smoothies','Appetizers/Sides','Meal Prep/Bulk'
@@ -21,6 +22,7 @@ const cuisines = [
 ];
 
 const Recipes = () => {
+  const { mode } = useDietMode();
   const { user } = useAuth();
   const [mealType, setMealType] = useState<string | undefined>();
   const [proteinSource, setProteinSource] = useState<string | undefined>();
@@ -189,7 +191,7 @@ Make this recipe truly unique and specific to ${customRecipeInput.trim()}. Inclu
           console.log(`🤖 Attempt ${attempts}/${maxAttempts} to call Gemini AI...`);
           
           result = await Promise.race([
-            geminiAI.model.generateContent(prompt),
+            (geminiAI as any).model.generateContent(prompt),
             new Promise((_, reject) => 
               setTimeout(() => reject(new Error('AI timeout')), 15000)
             )
@@ -462,11 +464,11 @@ Make this recipe truly unique and specific to ${customRecipeInput.trim()}. Inclu
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
-      <h1 className="text-4xl font-bold text-foreground mb-4">Generate AI Recipes</h1>
+      <h1 className="text-4xl font-bold text-foreground mb-4">Generate AI {mode === 'vegan' ? 'Vegan' : 'Vegetarian'} Recipes</h1>
       <Card className="mb-6">
         <CardHeader>
           <CardTitle>Customize your recipe</CardTitle>
-          <CardDescription>Choose filters and generate 3 vegan recipe options</CardDescription>
+          <CardDescription>Choose filters and generate 3 {mode === 'vegan' ? 'vegan' : 'vegetarian'} recipe options</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Custom Recipe Input Section */}
