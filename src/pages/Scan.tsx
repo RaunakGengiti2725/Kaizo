@@ -37,6 +37,7 @@ const Scan = () => {
   const [veganResult, setVeganResult] = useState<VeganResult | null>(null);
   const [productName, setProductName] = useState<string>('');
   const [brandName, setBrandName] = useState<string>('');
+  const [productImageUrl, setProductImageUrl] = useState<string>('');
   const [dietClass, setDietClass] = useState<'vegan' | 'vegetarian' | 'neither'>('vegan');
   const [analysis, setAnalysis] = useState<VeganCheckResult | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -87,11 +88,17 @@ const Scan = () => {
       if (productData) {
         setProductName(productData.productName || 'Unknown Product');
         setBrandName(productData.brand || 'Unknown Brand');
+        setProductImageUrl(productData.imageUrl || '');
         
         // Analyze ingredients with Gemini AI / detailed pipeline
         if (productData.ingredientsText) {
           const detailed = await analyzeIngredientsForVegan(productData.ingredientsText);
-          setVeganResult(detailed.summary);
+          let mergedSummary = detailed.summary;
+          // Fallback to OpenFoodFacts ecoscore (0-100) if AI score missing
+          if (!mergedSummary.ecoScore && typeof productData.ecoscoreScore === 'number') {
+            mergedSummary = { ...mergedSummary, ecoScore: Math.round(productData.ecoscoreScore / 10) };
+          }
+          setVeganResult(mergedSummary);
           setAnalysis(detailed.detail);
         } else {
           setVeganResult({
@@ -256,13 +263,10 @@ const Scan = () => {
       problematicIngredients: ai.detectedIngredients?.filter(d => d.category === 'notVegan')?.map(d => d.ingredient) || [],
       proteinSources,
       allergens,
-      ecoScore: ai.carbonFootprint?.score ? Math.round(ai.carbonFootprint.score / 20) : undefined,
-      reasoning: ai.reasons?.[0],
-      healthScore: Math.max(0, Math.min(100, healthScore)),
-      certifications,
-      crossContactRisk,
-      crossContactDetails,
-      verificationDate: new Date().toLocaleDateString()
+      // Normalize AI eco score (0-100) to 0-10 scale for grading
+      ecoScore: ai.carbonFootprint?.score ? Math.round(ai.carbonFootprint.score / 10) : undefined,
+      reasoning: ai.reasons?.[0]
+
     };
     return { summary, detail: ai };
   };
@@ -316,12 +320,8 @@ const Scan = () => {
     setVeganResult(null);
     setProductName('');
     setBrandName('');
-    setAnalysis(null);
-    
-    // Add to scan history if we have a result
-    if (veganResult) {
-      addToScanHistory(veganResult);
-    }
+    setProductImageUrl('');
+
     
     // Restart camera if on barcode tab
     if (activeTab === 'barcode') {
@@ -591,51 +591,51 @@ const Scan = () => {
             </DialogDescription>
           </DialogHeader>
 
-          {veganResult ? (
-            <div className="space-y-8">
-              {/* Main Result Banner */}
-              <div className={`p-6 rounded-xl border-2 ${
-                veganResult.isVegan 
-                  ? 'border-green-200 bg-green-50 dark:bg-green-950/20' 
-                  : 'border-orange-200 bg-orange-50 dark:bg-orange-950/20'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className={`p-3 rounded-full ${
-                      veganResult.isVegan 
-                        ? 'bg-green-100 dark:bg-green-900/30' 
-                        : 'bg-orange-100 dark:bg-orange-900/30'
-                    }`}>
-                      {veganResult.isVegan ? (
-                        <CheckCircle className="w-8 h-8 text-green-600" />
-                      ) : (
-                        <AlertTriangle className="w-8 h-8 text-orange-600" />
-                      )}
-                    </div>
-                    <div>
-                      <h2 className={`text-2xl font-bold ${
-                        veganResult.isVegan ? 'text-green-800 dark:text-green-200' : 'text-orange-800 dark:text-orange-200'
-                      }`}>
-                        {veganResult.isVegan ? 'Vegan Safe' : 'Not Vegan'}
-                      </h2>
-                      <p className="text-muted-foreground">
-                        Confidence: {Math.round((veganResult.confidence || 0) * 100)}%
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm text-muted-foreground">Diet Mode</div>
-                    <Badge variant="outline" className="text-sm">
-                      {mode === 'vegan' ? 'Vegan' : 'Vegetarian'}
-                    </Badge>
-                  </div>
-                </div>
-                {veganResult.reasoning && (
-                  <div className="mt-4 p-4 bg-white/60 dark:bg-gray-800/60 rounded-lg">
-                    <h3 className="font-semibold mb-2">Analysis Summary</h3>
-                    <p className="text-sm text-muted-foreground">{veganResult.reasoning}</p>
-                  </div>
+          {veganResult && (
+            <div className="space-y-6">
+              {/* Header with Image, Status and Eco Score */}
+              <div className="flex items-start gap-4 p-4 rounded-lg border-2 border-border/30">
+                {/* Product Image */}
+                {productImageUrl ? (
+                  <img src={productImageUrl} alt={productName || 'Product image'} className="w-20 h-20 object-cover rounded-md border" />
+                ) : (
+                  <div className="w-20 h-20 rounded-md border bg-muted/30 flex items-center justify-center text-xs text-muted-foreground">No Image</div>
                 )}
+
+                {/* Status and Eco */}
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="text-4xl">
+                        {veganResult.isVegan ? '🌱' : dietClass === 'vegetarian' ? '🥬' : '❌'}
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold">
+                          {mode === 'vegan' ? (veganResult.isVegan ? 'Vegan Safe!' : dietClass === 'vegetarian' ? 'Not Vegan (Vegetarian OK)' : 'Not Vegan') : (veganResult.isVegan ? 'Vegetarian Safe' : 'Not Vegetarian')}
+                        </h3>
+                        <p className="text-xs text-muted-foreground">Confidence: {Math.round((veganResult.confidence || 0) * 100)}%</p>
+                      </div>
+                    </div>
+
+                    {/* Eco Score compact */}
+                    {typeof veganResult.ecoScore === 'number' && (
+                      <div className="text-right">
+                        <div className="flex items-center gap-2 justify-end">
+                          <TreePine className="w-4 h-4 text-blue-600" />
+                          <span className="text-xs text-blue-800 font-medium">Eco Score</span>
+                        </div>
+                        <div className={`text-xl font-bold ${getEcoGrade(veganResult.ecoScore).gradeColor}`}>
+                          {getEcoGrade(veganResult.ecoScore).grade}
+                        </div>
+                        <div className="text-[10px] text-blue-700">{getEcoGrade(veganResult.ecoScore).description}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {veganResult.reasoning && (
+                    <p className="mt-2 text-sm">{veganResult.reasoning}</p>
+                  )}
+                </div>
               </div>
 
               {/* Health Score & Certifications Row */}
@@ -871,30 +871,17 @@ const Scan = () => {
                 </div>
               </div>
 
-              {/* Eco Score */}
-              {veganResult.ecoScore !== undefined && veganResult.ecoScore !== null && (
-                <div className="p-6 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-800 rounded-xl shadow-sm">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-blue-800 dark:text-blue-200 flex items-center gap-2">
-                      <TreePine className="w-5 h-5" />
-                      Environmental Impact
-                    </h3>
-                    <div className={`text-3xl font-bold ${getEcoGrade(veganResult.ecoScore).gradeColor}`}>
-                      {getEcoGrade(veganResult.ecoScore).grade}
-                    </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    {getEcoGrade(veganResult.ecoScore).description}
-                  </p>
-                  {analysis?.carbonFootprint?.reasons && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {analysis.carbonFootprint.reasons.slice(0, 6).map((r, i) => (
-                        <div key={i} className="text-sm text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/30 p-3 rounded-lg">
-                          {r}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+              {/* Eco reasons (detailed) */}
+              {typeof veganResult.ecoScore === 'number' && analysis?.carbonFootprint?.reasons && (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <h4 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
+                    <TreePine className="w-4 h-4 text-blue-600" />
+                    Environmental Notes
+                  </h4>
+                  <ul className="mt-1 text-sm text-blue-800 list-disc pl-5">
+                    {analysis.carbonFootprint.reasons.slice(0, 5).map((r, i) => (<li key={i}>{r}</li>))}
+                  </ul>
+
                 </div>
               )}
             </div>
