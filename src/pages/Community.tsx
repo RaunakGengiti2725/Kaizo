@@ -97,8 +97,12 @@ const Community = () => {
 
   // Fetch from Supabase when configured
   useEffect(() => {
+    if (!supaReady) return;
+
+    let pollInterval: NodeJS.Timeout;
+    let channel: any;
+
     const init = async () => {
-      if (!supaReady) return;
       const { data, error } = await supabase
         .from('community_posts')
         .select('id, author, content, tags, created_at, likes, comments:community_comments(id, author, content, created_at)')
@@ -125,7 +129,7 @@ const Community = () => {
       setPosts(normalized);
 
       // Realtime using broadcast channels (available now)
-      const channel = supabase.channel('community_room');
+      channel = supabase.channel('community_room');
       
       channel
         .on('broadcast', { event: 'new_post' }, (payload) => {
@@ -146,7 +150,7 @@ const Community = () => {
         .subscribe();
 
       // Polling fallback for data sync every 30 seconds
-      const pollInterval = setInterval(async () => {
+      pollInterval = setInterval(async () => {
         try {
           const { data } = await supabase
             .from('community_posts')
@@ -188,14 +192,14 @@ const Community = () => {
           console.warn('Polling sync failed:', error);
         }
       }, 30000);
-
-      return () => {
-        clearInterval(pollInterval);
-        supabase.removeChannel(channel);
-      };
     };
-    const cleanup = init();
-    return () => { cleanup && typeof cleanup === 'function' && cleanup(); };
+
+    init();
+
+    return () => {
+      if (pollInterval) clearInterval(pollInterval);
+      if (channel) supabase.removeChannel(channel);
+    };
   }, [supaReady]);
 
   const allTags = useMemo(() => {
