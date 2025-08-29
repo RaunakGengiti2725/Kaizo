@@ -109,7 +109,10 @@ const Scan = () => {
             certifications: [],
             crossContactRisk: 'medium',
             crossContactDetails: 'Unable to determine due to missing ingredient data',
-            verificationDate: new Date().toLocaleDateString()
+            verificationDate: new Date().toLocaleDateString(),
+            problematicIngredients: [],
+            proteinSources: [],
+            allergens: []
           });
           setAnalysis(null);
         }
@@ -265,8 +268,12 @@ const Scan = () => {
       allergens,
       // Normalize AI eco score (0-100) to 0-10 scale for grading
       ecoScore: ai.carbonFootprint?.score ? Math.round(ai.carbonFootprint.score / 10) : undefined,
-      reasoning: ai.reasons?.[0]
-
+      reasoning: ai.reasons?.[0],
+      healthScore: Math.max(0, Math.min(100, healthScore)),
+      certifications,
+      crossContactRisk,
+      crossContactDetails,
+      verificationDate: new Date().toLocaleDateString()
     };
     return { summary, detail: ai };
   };
@@ -321,6 +328,12 @@ const Scan = () => {
     setProductName('');
     setBrandName('');
     setProductImageUrl('');
+    setAnalysis(null);
+    
+    // Add to scan history if we have a result
+    if (veganResult) {
+      addToScanHistory(veganResult);
+    }
 
     
     // Restart camera if on barcode tab
@@ -591,7 +604,7 @@ const Scan = () => {
             </DialogDescription>
           </DialogHeader>
 
-          {veganResult && (
+          {veganResult ? (
             <div className="space-y-6">
               {/* Header with Image, Status and Eco Score */}
               <div className="flex items-start gap-4 p-4 rounded-lg border-2 border-border/30">
@@ -617,19 +630,7 @@ const Scan = () => {
                       </div>
                     </div>
 
-                    {/* Eco Score compact */}
-                    {typeof veganResult.ecoScore === 'number' && (
-                      <div className="text-right">
-                        <div className="flex items-center gap-2 justify-end">
-                          <TreePine className="w-4 h-4 text-blue-600" />
-                          <span className="text-xs text-blue-800 font-medium">Eco Score</span>
-                        </div>
-                        <div className={`text-xl font-bold ${getEcoGrade(veganResult.ecoScore).gradeColor}`}>
-                          {getEcoGrade(veganResult.ecoScore).grade}
-                        </div>
-                        <div className="text-[10px] text-blue-700">{getEcoGrade(veganResult.ecoScore).description}</div>
-                      </div>
-                    )}
+
                   </div>
 
                   {veganResult.reasoning && (
@@ -871,19 +872,42 @@ const Scan = () => {
                 </div>
               </div>
 
-              {/* Eco reasons (detailed) */}
-              {typeof veganResult.ecoScore === 'number' && analysis?.carbonFootprint?.reasons && (
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <h4 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
-                    <TreePine className="w-4 h-4 text-blue-600" />
-                    Environmental Notes
-                  </h4>
-                  <ul className="mt-1 text-sm text-blue-800 list-disc pl-5">
-                    {analysis.carbonFootprint.reasons.slice(0, 5).map((r, i) => (<li key={i}>{r}</li>))}
-                  </ul>
-
+              {/* Environmental Score & Notes */}
+              {typeof veganResult.ecoScore === 'number' && (
+                <div className="p-6 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 border border-blue-200 dark:border-blue-800 rounded-xl shadow-sm">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <TreePine className="w-6 h-6 text-blue-600" />
+                      <h3 className="text-xl font-bold text-blue-800 dark:text-blue-200">Environmental Score</h3>
+                    </div>
+                    <div className="text-right">
+                      <div className={`text-5xl font-bold ${getEcoGrade(veganResult.ecoScore).gradeColor}`}>
+                        {getEcoGrade(veganResult.ecoScore).grade}
+                      </div>
+                      <div className={`text-lg font-semibold ${getEcoGrade(veganResult.ecoScore).gradeColor}`}>
+                        {getEcoGrade(veganResult.ecoScore).description}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {analysis?.carbonFootprint?.reasons && analysis.carbonFootprint.reasons.length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="font-semibold text-blue-800 dark:text-blue-200 mb-3 flex items-center gap-2">
+                        <TreePine className="w-4 h-4 text-blue-600" />
+                        Environmental Analysis
+                      </h4>
+                      <ul className="text-sm text-blue-800 dark:text-blue-200 list-disc pl-5 space-y-1">
+                        {analysis.carbonFootprint.reasons.map((reason, index) => (
+                          <li key={index} className="mb-2">
+                            {reason}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               )}
+
             </div>
           ) : (
             <div className="text-center py-8">
